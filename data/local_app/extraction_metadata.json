@@ -1,7 +1,7 @@
 {
   "sensor_tower_data_as_of_date": "2026-07-13",
-  "last_successful_sensor_tower_refresh_at": "",
+  "last_successful_sensor_tower_refresh_at": "2026-07-21T01:12:47.146159+00:00",
   "last_successful_sensor_tower_report_start_date": "2026-06-23",
   "last_successful_sensor_tower_report_end_date": "2026-07-13",
-  "updated_by": "manual_seed_from_known_real_sensor_tower_data"
+  "updated_by": "scripts/meeting_date_final_report.py"
 }
