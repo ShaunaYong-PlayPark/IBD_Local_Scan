@@ -1,0 +1,42 @@
+.env
+.env.*
+!.env.example
+
+# Secrets and local configuration
+config/settings.json
+
+# Local backups, logs, temp files, and Python cache
+backups/
+archive/
+deliverables/
+.git_broken_backup*/
+**/__pycache__/
+*.pyc
+*.pyo
+*.log
+*.err
+*.tmp
+*.bak
+*.swp
+~$*
+
+# Generated/raw workflow data
+data/raw/
+data/cache/
+data/output/
+data/title_canonicalizer/
+data/candidates/snapshots/
+data/local_app/*.log
+data/local_app/*.err
+data/local_app/tmp_*
+data/local_app/report_snapshots/
+
+# Local-only runtime state
+data/local_app/state.json
+data/local_app/change_history.csv
+data/local_app/signal_overrides.csv
+data/local_app/watchlist.csv
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

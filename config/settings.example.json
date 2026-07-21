@@ -1,0 +1,37 @@
+{
+  "ranking_date": "2026-07-26",
+  "country": "SG",
+  "released_tag_name": "Released Days Ago (WW)",
+  "released_tag_values": [
+    "~ 1 week"
+  ],
+  "platforms": {
+    "ios": {
+      "app_id_type": "itunes",
+      "category": "6014",
+      "charts": {
+        "topfreeapplications": "Top Free iPhone Apps",
+        "topgrossingapplications": "Top Grossing iPhone Apps"
+      }
+    },
+    "android": {
+      "app_id_type": "android",
+      "category": "game",
+      "charts": {
+        "topselling_free": "Top Free Android Apps",
+        "topgrossing": "Top Grossing Android Apps"
+      }
+    }
+  },
+  "report_start_date": "2026-07-14",
+  "report_end_date": "2026-07-27",
+  "sensor_tower_lag_days": 1,
+  "sea6_countries": [
+    "SG",
+    "MY",
+    "TH",
+    "ID",
+    "PH",
+    "VN"
+  ]
+}
