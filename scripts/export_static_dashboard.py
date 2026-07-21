@@ -9,6 +9,7 @@ from html import escape
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "output"
+FINALIZED = ROOT / "data" / "finalized_briefs"
 LOCAL_APP = ROOT / "data" / "local_app"
 DOCS = ROOT / "docs"
 ASSETS = DOCS / "assets"
@@ -16,6 +17,7 @@ DATA = DOCS / "data"
 STATIC = ROOT / "static"
 SCHEDULE = ROOT / "config" / "static_report_schedule.json"
 FINAL_CSV = OUT / "final_sg_market_scan_current_workflow.csv"
+LATEST_FINALIZED_CSV = FINALIZED / "latest_finalized_brief.csv"
 DOCS_FINAL_CSV = DATA / "final_sg_market_scan_current_workflow.csv"
 DOCS_FINAL_JSON = DATA / "final-report.json"
 METADATA = LOCAL_APP / "extraction_metadata.json"
@@ -43,8 +45,35 @@ def read_json(path, default):
         return json.load(handle)
 
 
-def source_final_csv():
-    return FINAL_CSV if FINAL_CSV.exists() else DOCS_FINAL_CSV
+def csv_period(path):
+    rows = read_csv(path)
+    if not rows:
+        return None, None
+    return parse_date(rows[0].get("report_start_date")), parse_date(rows[0].get("report_end_date"))
+
+
+def period_matches_metadata(path, metadata):
+    start, end = csv_period(path)
+    expected_start = parse_date(metadata.get("last_successful_sensor_tower_report_start_date"))
+    expected_end = parse_date(metadata.get("last_successful_sensor_tower_report_end_date"))
+    if not expected_start or not expected_end:
+        return False
+    return start == expected_start and end == expected_end
+
+
+def source_finalized_csv(metadata=None):
+    metadata = metadata or {}
+    manual_start, manual_end = csv_period(LATEST_FINALIZED_CSV)
+    output_start, output_end = csv_period(FINAL_CSV)
+
+    if FINAL_CSV.exists() and period_matches_metadata(FINAL_CSV, metadata):
+        if not manual_end or (output_end and output_end > manual_end):
+            return FINAL_CSV
+    if LATEST_FINALIZED_CSV.exists():
+        return LATEST_FINALIZED_CSV
+    if FINAL_CSV.exists() and period_matches_metadata(FINAL_CSV, metadata):
+        return FINAL_CSV
+    return DOCS_FINAL_CSV
 
 
 def source_metadata():
@@ -200,6 +229,30 @@ def report_period(rows, schedule):
     return display_date(start), display_date(end)
 
 
+def meeting_date_for(rows, schedule):
+    if rows:
+        end = parse_date(rows[0].get("report_end_date", ""))
+        if end:
+            return display_date((end + timedelta(days=1)).isoformat())
+    return display_date(schedule.get("upcoming_meeting_date", ""))
+
+
+def in_progress_period(schedule):
+    start = schedule.get("last_completed_meeting_date", "")
+    meeting = parse_date(schedule.get("upcoming_meeting_date", ""))
+    end = (meeting - timedelta(days=1)).isoformat() if meeting else ""
+    return display_date(start), display_date(end)
+
+
+def staging_summary_text(weekly_summary):
+    count = weekly_summary.get("new_or_seen_candidates") if isinstance(weekly_summary, dict) else None
+    if count == 0:
+        return weekly_summary.get("empty_message") or "No weekly candidates found for this extraction window."
+    if count:
+        return f"{count} candidate(s) are staged for the upcoming meeting-day review."
+    return "Weekly extraction data for this window remains staging until the meeting-day final report is generated."
+
+
 def data_as_of(metadata):
     value = metadata.get("sensor_tower_data_as_of_date") or metadata.get("last_successful_sensor_tower_report_end_date")
     return display_date(value) or "N/A"
@@ -231,7 +284,7 @@ def safe_float(value):
 
 def page_shell(title, active, body, rows, schedule, metadata):
     start, end = report_period(rows, schedule)
-    meeting = display_date(schedule.get("upcoming_meeting_date", ""))
+    meeting = meeting_date_for(rows, schedule)
     active_name = next((label for _, label, _, key in NAV_ITEMS if key == active), "Latest Brief")
     nav = "".join(
         f'<a class="{"on" if key == active else ""}" href="{href}" data-tooltip="{escape(desc)}" '
@@ -278,9 +331,9 @@ def page_shell(title, active, body, rows, schedule, metadata):
 
 
 def page_header(eyebrow, title, desc="", actions=""):
+    action_html = f'\n  <div class="page-actions">{actions}</div>' if actions else ''
     return f"""<section class="page-header">
-  <div><em>{escape(eyebrow)}</em><h1>{escape(title)}</h1>{f'<p>{escape(desc)}</p>' if desc else ''}</div>
-  {f'<div class="page-actions">{actions}</div>' if actions else ''}
+  <div><em>{escape(eyebrow)}</em><h1>{escape(title)}</h1>{f'<p>{escape(desc)}</p>' if desc else ''}</div>{action_html}
 </section>"""
 
 
@@ -348,7 +401,7 @@ def market_chips(row):
 def signal_card(row, group):
     title = title_for(row)
     original = row.get("Original Title") or row.get("original_title") or ""
-    title_note = f'<p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
+    title_note = f'\n    <p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
     reason = row.get("Market Overview Reason") or row.get("Inclusion Reason") or row.get("Key Details") or "Available in current final report output."
     pill_class = "strong" if group == "strong" else "emerging"
     card_class = "rich-signal-card" if group == "strong" else "rich-signal-card emerging"
@@ -364,8 +417,7 @@ def signal_card(row, group):
       {value_chips(row.get("Platform") or "Platform unavailable")}
       {value_chips(row.get("Genre") or "Genre unavailable")}
       <span class="metric-badge neutral">Release {escape(display_date(row.get("Release Date")) or row.get("Release Date") or "N/A")}</span>
-    </div>
-    {title_note}
+    </div>{title_note}
   </div>
   <div class="card-block">
     <h4>Local Performance</h4>
@@ -469,27 +521,18 @@ def latest_page(rows, schedule, metadata, view="cards"):
     return page_shell("Latest Brief", "latest", body, rows, schedule, metadata)
 
 
-def historical_page(rows, schedule, metadata):
-    start, end = report_period(rows, schedule)
-    strong = [r for r in rows if signal_group(r) == "strong"]
-    leader = max(rows, key=lambda r: safe_float(r.get("SG Gross Revenue")), default={})
-    card = f"""<article class="archive-card reading-card">
-  <div class="archive-main">
-    <small>Current brief</small>
-    <h3>{escape(start or "N/A")} to {escape(end or "N/A")}</h3>
-    {compact_kv([
-        ("Launch records", escape(str(len(rows)))),
-        ("Strong signals", escape(str(len(strong)))),
-        ("Top title", escape(title_for(leader)) if leader else "Unavailable"),
-    ])}
-  </div>
-  <a class="btn primary" href="latest-brief.html">Open full brief</a>
-</article>"""
+def historical_page(rows, schedule, metadata, weekly_summary=None):
+    in_progress_start, in_progress_end = in_progress_period(schedule)
+    staging_note = staging_summary_text(weekly_summary or {})
+    archive_empty = empty_state(
+        "No older finalized briefs yet.",
+        "Finalized reports will move here after a newer meeting-day brief replaces them.",
+    )
     body = (
         page_header("Historical Briefs", "Brief archive", "Open past market briefs by reporting period.")
         + '<section class="archive-toolbar"><a class="btn primary" href="latest-brief.html">Latest</a><input type="search" id="archiveSearch" placeholder="Search briefs"></section>'
-        + f'<div class="combined-archive-grid"><section><h2>Briefs</h2><div class="archive-grid">{card}</div></section>'
-        + f'<aside class="combined-timeline"><h2>Meeting Rhythm</h2><div class="timeline-list compact"><article class="timeline-item"><div class="timeline-date"><span>Upcoming</span><b>{escape(display_date(schedule.get("upcoming_meeting_date", "")) or "N/A")}</b></div><div class="timeline-detail"><h3>Next meeting</h3><p>Report period rolls up to the day before this date.</p></div></article></div></aside></div>'
+        + f'<div class="combined-archive-grid"><section><h2>Briefs</h2><div class="archive-grid">{archive_empty}</div></section>'
+        + f'<aside class="combined-timeline"><h2>Upcoming / In progress</h2><div class="timeline-list compact"><article class="timeline-item"><div class="timeline-date"><span>Next meeting</span><b>{escape(display_date(schedule.get("upcoming_meeting_date", "")) or "N/A")}</b></div><div class="timeline-detail"><h3>{escape(in_progress_start or "N/A")} to {escape(in_progress_end or "N/A")}</h3><p>{escape(staging_note)}</p></div></article></div></aside></div>'
     )
     return page_shell("Historical Briefs", "historical", body, rows, schedule, metadata)
 
@@ -502,7 +545,7 @@ def tracker_page(rows, schedule, metadata):
   <label>Signal <select id="signalFilter"><option value="">All signals</option><option>Strong Market Signal</option><option>Emerging Market Signal</option></select></label>
   <button type="button" id="clearTrackerFilters">Clear</button>
 </section>
-<div class="filter-chips"><span>Filters</span><a class="filter-chip" href="latest-brief.html"><span>Open</span>Current brief</a></div>"""
+<div class="filter-chips"><span>Filters</span><a class="filter-chip" href="latest-brief.html"><span>Open</span>Latest brief</a></div>"""
         + report_table(rows)
     )
     return page_shell("Game Tracker", "tracker", body, rows, schedule, metadata)
@@ -520,10 +563,10 @@ def same_path(left, right):
         return left.absolute() == right.absolute()
 
 
-def write_data(rows, metadata, schedule):
+def write_data(rows, metadata, schedule, weekly_summary=None):
     DATA.mkdir(parents=True, exist_ok=True)
-    write_text(DATA / "final-report.json", json.dumps({"rows": rows, "metadata": metadata, "schedule": schedule}, ensure_ascii=False, indent=2))
-    source = source_final_csv()
+    write_text(DATA / "final-report.json", json.dumps({"rows": rows, "metadata": metadata, "schedule": schedule, "staging": weekly_summary or {}}, ensure_ascii=False, indent=2))
+    source = source_finalized_csv(metadata)
     destination = DATA / "final_sg_market_scan_current_workflow.csv"
     if source.exists() and not same_path(source, destination):
         shutil.copy2(source, destination)
@@ -705,16 +748,16 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 
 def main():
     weekly_summary = source_weekly_summary()
-    rows = [] if weekly_summary.get("new_or_seen_candidates") == 0 else read_csv(source_final_csv())
     metadata = source_metadata()
+    rows = read_csv(source_finalized_csv(metadata))
     schedule = read_json(SCHEDULE, {})
     DOCS.mkdir(parents=True, exist_ok=True)
     write_assets()
-    write_data(rows, metadata, schedule)
+    write_data(rows, metadata, schedule, weekly_summary)
     latest_cards = latest_page(rows, schedule, metadata, "cards")
     write_text(DOCS / "index.html", latest_cards)
     write_text(DOCS / "latest-brief.html", latest_cards)
-    write_text(DOCS / "historical-briefs.html", historical_page(rows, schedule, metadata))
+    write_text(DOCS / "historical-briefs.html", historical_page(rows, schedule, metadata, weekly_summary))
     write_text(DOCS / "game-tracker.html", tracker_page(rows, schedule, metadata))
     print(f"Static dashboard exported to {DOCS}")
 

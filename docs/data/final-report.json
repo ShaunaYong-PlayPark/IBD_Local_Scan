@@ -1,5 +1,64 @@
 {
-  "rows": [],
+  "rows": [
+    {
+      "Signal Type": "Strong Market Signal",
+      "Signal Definition": "Clear SG commercial traction: SG gross revenue exceeded $1,000 during the release/report period.",
+      "SG Gross Revenue": "21423.61",
+      "SG Downloads": "3748",
+      "Inclusion Reason": "Stored weekly candidate with SG gross revenue > $1,000 during the report period",
+      "Game Title": "Star Sailors",
+      "English Display Title": "Star Sailors",
+      "Original Title": "Star Sailors",
+      "Detected Language": "en",
+      "Machine English Title": "Star Sailors",
+      "Manual English Title": "",
+      "Translation Source": "unified_id_mapping",
+      "Translation Confidence": "high",
+      "Translation Review Status": "not_required",
+      "Translation Note": "Mapped from local master title mapping.",
+      "Platform": "iOS / Android",
+      "Publisher": "Com2uS Holdings",
+      "Release Date": "30-Jun-2026",
+      "Genre": "Role Playing; Strategy",
+      "Top 3 Markets": "Top Mkts: TH ($52,662 / 49,277 DL) || SG ($21,424 / 3,748 DL) || MY ($10,662 / 5,407 DL)",
+      "SG App Store Ranks": "SG App Store Ranks: iOS (DL #133 / Rev #173) || Android (DL #128 / Rev #160)",
+      "unified_app_id": "68d0aef41991c90375634e55",
+      "run_timestamp_utc": "2026-07-21T01:12:47.136852+00:00",
+      "report_start_date": "23-Jun-2026",
+      "report_end_date": "13-Jul-2026",
+      "ranking_date": "12-Jul-2026",
+      "sensor_tower_effective_end_date": "12-Jul-2026"
+    },
+    {
+      "Signal Type": "Strong Market Signal",
+      "Signal Definition": "Clear SG commercial traction: SG gross revenue exceeded $1,000 during the release/report period.",
+      "SG Gross Revenue": "8166",
+      "SG Downloads": "3269",
+      "Inclusion Reason": "Devsisters has brought another revival of its legacy IP while also preparing a broader mobile push.",
+      "Game Title": "CookieRun Classic",
+      "English Display Title": "CookieRun Classic",
+      "Original Title": "CookieRun Classic",
+      "Detected Language": "latin",
+      "Machine English Title": "CookieRun Classic",
+      "Manual English Title": "",
+      "Translation Source": "already_latin",
+      "Translation Confidence": "high",
+      "Translation Review Status": "not_required",
+      "Translation Note": "",
+      "Platform": "Mobile",
+      "Publisher": "Devsisters",
+      "Release Date": "25-Jun-2026",
+      "Genre": "Arcade",
+      "Top 3 Markets": "Top Mkts: TH ($2,558,351 / 953,355 DL) || ID ($19,984 / 28,202 DL) || SG ($8,166 / 3,269 DL)",
+      "SG App Store Ranks": "SG App Store Ranks: iOS (DL #NA / Rev #NA) || Android (DL #449 / Rev #NA)",
+      "unified_app_id": "manual_cookierun_classic_20260625",
+      "run_timestamp_utc": "2026-07-21T00:00:00+00:00",
+      "report_start_date": "23-Jun-2026",
+      "report_end_date": "13-Jul-2026",
+      "ranking_date": "12-Jul-2026",
+      "sensor_tower_effective_end_date": "12-Jul-2026"
+    }
+  ],
   "metadata": {
     "sensor_tower_data_as_of_date": "2026-07-13",
     "last_successful_sensor_tower_refresh_at": "2026-07-21T01:12:47.146159+00:00",
@@ -23,5 +82,6 @@
       "ranking_date_offset_days": 1
     },
     "notes": "Committed static-site schedule settings. Update this file by pull request/commit before running the static export."
-  }
+  },
+  "staging": {}
 }
