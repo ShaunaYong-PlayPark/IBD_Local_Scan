@@ -1,6 +1,19 @@
 # IBD Local Scan
 
-Local proof of concept for Singapore mobile launch discovery and meeting-cycle market briefs.
+Static dashboard for the IBD Singapore market scan workflow.
+
+Live dashboard: https://shaunayong-playpark.github.io/IBD_Local_Scan/
+
+This dashboard helps IBD review finalized Singapore market briefs, track relevant game launches, and preserve historical reporting output for meeting preparation.
+
+## Dashboard Overview
+
+- **Latest Brief** shows the most recently finalized meeting-day market brief.
+- **Brief Archive** shows older finalized briefs after they are replaced by newer final reports.
+- **Game Tracker** gives a structured view of games identified across finalized briefs.
+- **Upcoming / In Progress** shows staging context from weekly extraction runs for the next report window.
+
+Weekly extraction data is staging only. It does not replace the Latest Brief. A meeting-day final report becomes the finalized Latest Brief, and when a newer finalized report is created, the previous finalized brief moves into the archive.
 
 The project stores workflow data locally and exports a static GitHub Pages dashboard. Sensor Tower API calls are only made by the live extraction scripts. Offline tests and static dashboard rendering do not call Sensor Tower.
 
@@ -13,8 +26,6 @@ The project stores workflow data locally and exports a static GitHub Pages dashb
 5. Update report dates, ranking date, countries, or chart config in `config/settings.json` as needed.
 
 Do not commit `.env` or `config/settings.json`.
-
-## Dashboard
 
 ## Static GitHub Pages Dashboard
 
