@@ -9,6 +9,7 @@ config/settings.json
 backups/
 archive/
 deliverables/
+qa_screenshots/
 .git_broken_backup*/
 **/__pycache__/
 *.pyc

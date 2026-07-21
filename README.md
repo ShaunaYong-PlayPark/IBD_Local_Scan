@@ -2,7 +2,7 @@
 
 Local proof of concept for Singapore mobile launch discovery and meeting-cycle market briefs.
 
-The project stores workflow data locally and serves a private local dashboard. Sensor Tower API calls are only made by the live extraction scripts. Offline tests and dashboard rendering do not call Sensor Tower.
+The project stores workflow data locally and exports a static GitHub Pages dashboard. Sensor Tower API calls are only made by the live extraction scripts. Offline tests and static dashboard rendering do not call Sensor Tower.
 
 ## Setup
 
@@ -16,6 +16,48 @@ Do not commit `.env` or `config/settings.json`.
 
 ## Dashboard
 
+## Static GitHub Pages Dashboard
+
+The deployed MVP is a view-only static website generated into:
+
+```text
+docs/
+```
+
+GitHub Pages can serve the site from `docs/` without running a Python server.
+
+Build the static dashboard from existing local outputs:
+
+```powershell
+python scripts/export_static_dashboard.py
+```
+
+Open locally by double-clicking:
+
+```text
+docs/index.html
+```
+
+Static pages:
+
+- `docs/index.html`
+- `docs/latest-brief.html`
+- `docs/latest-brief.html?view=table`
+- `docs/historical-briefs.html`
+- `docs/game-tracker.html`
+
+The static site is view-only. It does not include login, Admin Console, country-admin access, browser-based audit log, or browser-based setting changes.
+
+Meeting date changes for the static site are made by editing and committing:
+
+```text
+config/static_report_schedule.json
+```
+
+After changing the schedule config or refreshing report outputs, rerun the static export and commit the updated `docs/` files.
+
+## Local Development Dashboard
+
 Run the local dashboard:
 
 ```powershell
@@ -28,7 +70,7 @@ Open:
 http://127.0.0.1:8787
 ```
 
-Private POC access is controlled by environment variables. Login requires a PlayPark email address and a password.
+The old local Python dashboard remains useful for development. Its login/admin features are not used by the static GitHub Pages deployment. Local dashboard access is controlled by environment variables. Login requires a PlayPark email address and a password.
 
 ```powershell
 $env:APP_VIEWER_PASSWORD='your_viewer_password'
@@ -156,10 +198,25 @@ Unknown non-Latin titles are preserved unchanged and flagged for review. The das
 
 ## Deployment Notes
 
-Before publishing to GitHub or deploying:
+For GitHub Pages:
+
+1. Push the repository to GitHub.
+2. In repository settings, enable Pages from the `docs/` folder on the main branch.
+3. Configure `SENSORTOWER_AUTH_TOKEN` as a GitHub Secret if GitHub Actions will run live extraction.
+4. Use `.github/workflows/build-static-dashboard.yml` to rebuild the static site manually or on schedule. Manual modes are `static-export-only`, `weekly-capture`, and `meeting-day-final-report`.
+
+Scheduled runs happen daily and use `config/static_report_schedule.json` to decide the correct action:
+
+- On the configured weekly capture weekday, the workflow runs `scripts/weekly_candidate_capture.py`, then exports the static site.
+- On the configured upcoming meeting date, the workflow runs `scripts/meeting_date_final_report.py`, then exports the static site.
+- On other days, it runs static export only.
+
+If a scheduled live automation is due but `SENSORTOWER_AUTH_TOKEN` is missing from GitHub Secrets, the workflow fails clearly and does not publish a fresh-looking stale site.
+
+Before any broader deployment:
 
 - keep secrets in environment variables,
 - do not commit raw Sensor Tower responses,
 - do not commit local logs, backups, caches, or runtime state,
-- add private access control before sharing with external viewers,
-- use persistent storage for mutable CSV/JSON state or migrate to a database.
+- remember GitHub Pages is view-only static hosting,
+- configure scheduled jobs deliberately because live Sensor Tower refreshes consume API calls.

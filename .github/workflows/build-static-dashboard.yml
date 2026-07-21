@@ -1,0 +1,81 @@
+name: Build static dashboard
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Automation mode"
+        required: true
+        default: "static-export-only"
+        type: choice
+        options:
+          - static-export-only
+          - weekly-capture
+          - meeting-day-final-report
+  schedule:
+    - cron: "0 0 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: static-dashboard
+  cancel-in-progress: false
+
+jobs:
+  build-static-dashboard:
+    runs-on: ubuntu-latest
+    env:
+      SENSORTOWER_AUTH_TOKEN: ${{ secrets.SENSORTOWER_AUTH_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -s requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Resolve automation mode
+        id: resolve
+        env:
+          REQUESTED_MODE: ${{ github.event.inputs.mode || 'auto' }}
+        run: python scripts/resolve_static_automation.py --mode "$REQUESTED_MODE"
+
+      - name: Require Sensor Tower secret for live automation
+        if: ${{ steps.resolve.outputs.live_required == 'true' }}
+        run: |
+          if [ -z "$SENSORTOWER_AUTH_TOKEN" ]; then
+            echo "::error::SENSORTOWER_AUTH_TOKEN GitHub Secret is required for ${{ steps.resolve.outputs.mode }}. Static output was not rebuilt or published."
+            exit 1
+          fi
+
+      - name: Run weekly candidate capture
+        if: ${{ steps.resolve.outputs.mode == 'weekly-capture' }}
+        run: python scripts/weekly_candidate_capture.py
+
+      - name: Run meeting-day final report
+        if: ${{ steps.resolve.outputs.mode == 'meeting-day-final-report' }}
+        run: python scripts/meeting_date_final_report.py
+
+      - name: Build static dashboard
+        run: python scripts/export_static_dashboard.py
+
+      - name: Commit generated static dashboard
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs config/static_report_schedule.json data/local_app/extraction_metadata.json data/candidates/weekly_candidate_store.csv
+          if git diff --cached --quiet; then
+            echo "No generated dashboard changes to commit."
+          else
+            git commit -m "Update static dashboard output"
+            git push origin main
+          fi

@@ -1,0 +1,17 @@
+{
+  "last_completed_meeting_date": "2026-07-14",
+  "upcoming_meeting_date": "2026-07-28",
+  "meeting_time": "16:00",
+  "timezone": "Asia/Singapore",
+  "weekly_candidate_capture": {
+    "enabled": true,
+    "weekday": "Sunday",
+    "ranking_date_offset_days": 1
+  },
+  "meeting_day_final_report": {
+    "enabled": true,
+    "run_on": "upcoming_meeting_date",
+    "ranking_date_offset_days": 1
+  },
+  "notes": "Committed static-site schedule settings. Update this file by pull request/commit before running the static export."
+}
