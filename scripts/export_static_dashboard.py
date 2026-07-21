@@ -513,12 +513,20 @@ def write_text(path, text):
     path.write_text(text, encoding="utf-8")
 
 
+def same_path(left, right):
+    try:
+        return left.resolve() == right.resolve()
+    except OSError:
+        return left.absolute() == right.absolute()
+
+
 def write_data(rows, metadata, schedule):
     DATA.mkdir(parents=True, exist_ok=True)
     write_text(DATA / "final-report.json", json.dumps({"rows": rows, "metadata": metadata, "schedule": schedule}, ensure_ascii=False, indent=2))
     source = source_final_csv()
-    if source.exists():
-        shutil.copy2(source, DATA / "final_sg_market_scan_current_workflow.csv")
+    destination = DATA / "final_sg_market_scan_current_workflow.csv"
+    if source.exists() and not same_path(source, destination):
+        shutil.copy2(source, destination)
 
 
 def write_assets():
