@@ -19,6 +19,7 @@ FINAL_CSV = OUT / "final_sg_market_scan_current_workflow.csv"
 DOCS_FINAL_CSV = DATA / "final_sg_market_scan_current_workflow.csv"
 DOCS_FINAL_JSON = DATA / "final-report.json"
 METADATA = LOCAL_APP / "extraction_metadata.json"
+WEEKLY_SUMMARY = OUT / "weekly_candidate_capture_summary.json"
 
 
 NAV_ITEMS = [
@@ -51,6 +52,11 @@ def source_metadata():
         return read_json(METADATA, {})
     previous = read_json(DOCS_FINAL_JSON, {})
     return previous.get("metadata", {}) if isinstance(previous, dict) else {}
+
+
+def source_weekly_summary():
+    summary = read_json(WEEKLY_SUMMARY, {})
+    return summary if isinstance(summary, dict) else {}
 
 
 def parse_date(value):
@@ -279,6 +285,17 @@ def page_header(eyebrow, title, desc="", actions=""):
 
 
 def summary_cards(rows):
+    if not rows:
+        cards = [
+            ("snapshot", "Current snapshot", "0 included launches", "No weekly candidates"),
+            ("opportunity", "Top opportunity", "N/A", "No candidate met the extraction criteria"),
+            ("risk", "Watchlist focus", "0 monitoring item(s)", "Nothing new to review"),
+            ("action", "SG gross revenue", "$0", "No candidate revenue in this window"),
+        ]
+        return '<section class="summary-card-grid">' + "".join(
+            f'<article class="summary-card {escape(kind)}"><small>{escape(label)}</small><h3>{escape(headline)}</h3><p>{escape(detail)}</p></article>'
+            for kind, label, headline, detail in cards
+        ) + "</section>"
     strong = [r for r in rows if signal_group(r) == "strong"]
     emerging = [r for r in rows if signal_group(r) != "strong"]
     leader = max(rows, key=lambda r: safe_float(r.get("SG Gross Revenue")), default={})
@@ -296,6 +313,16 @@ def summary_cards(rows):
 
 
 def executive_summary(rows):
+    if not rows:
+        bullets = [
+            "No weekly candidates found for this extraction window.",
+            "No new released-game item met the configured SG discovery criteria.",
+            "Dashboard remains ready for the next weekly capture or meeting-day refresh.",
+        ]
+        return f"""<section class="brief-section executive-section">
+  <div class="section-heading"><div><h2>Executive Summary</h2><p>Level 1 scan: what changed, why it matters, and where to focus.</p></div></div>
+  <ul class="executive-bullets">{''.join(f'<li>{escape(item)}</li>' for item in bullets)}</ul>
+</section>"""
     strong = [r for r in rows if signal_group(r) == "strong"]
     emerging = [r for r in rows if signal_group(r) != "strong"]
     leader = max(rows, key=lambda r: safe_float(r.get("SG Gross Revenue")), default={})
@@ -669,7 +696,8 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 
 
 def main():
-    rows = read_csv(source_final_csv())
+    weekly_summary = source_weekly_summary()
+    rows = [] if weekly_summary.get("new_or_seen_candidates") == 0 else read_csv(source_final_csv())
     metadata = source_metadata()
     schedule = read_json(SCHEDULE, {})
     DOCS.mkdir(parents=True, exist_ok=True)

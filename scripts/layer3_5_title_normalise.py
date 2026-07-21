@@ -1,4 +1,5 @@
 import csv
+import json
 import re
 from pathlib import Path
 
@@ -6,6 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 INPUT = ROOT / "data" / "output" / "layer3_unique_game_metadata.csv"
 OUTPUT = ROOT / "data" / "output" / "layer3_5_title_normalised_metadata.csv"
+OUTPUT_JSON = ROOT / "data" / "output" / "layer3_5_title_normalised_metadata.json"
+LAYER2_INPUT = ROOT / "data" / "output" / "layer2_unified_candidates.csv"
 MAPPING = ROOT / "data" / "reference" / "master_title_mapping.csv"
 
 
@@ -29,6 +32,34 @@ COMPAT_FIELDS = [
     "translation_note",
 ]
 
+LAYER3_FIELDS = [
+    "layer3_run_timestamp_utc",
+    "unified_app_id",
+    "unified_app_name",
+    "representative_platform",
+    "representative_app_id",
+    "publisher_name",
+    "publisher_id",
+    "genre",
+    "category_ids",
+    "category_labels",
+    "ios_app_ids",
+    "android_app_ids",
+    "all_layer1_app_ids",
+    "platforms_seen_in_layer1",
+    "best_sg_rank",
+    "sg_chart_matches",
+    "released_tag_matches",
+    "release_date",
+    "country_release_date",
+    "representative_country_release_date",
+    "updated_date",
+    "active",
+    "valid_in_sg",
+    "metadata_lookup_status",
+    "raw_app_metadata_json",
+]
+
 
 def read_csv(path):
     if not path.exists():
@@ -37,12 +68,26 @@ def read_csv(path):
         return list(csv.DictReader(handle))
 
 
+def csv_fields(path):
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        return list(reader.fieldnames or [])
+
+
 def write_csv(path, rows, fields):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def write_json(path, rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(rows, handle, ensure_ascii=False, indent=2)
 
 
 def clean(value):
@@ -208,10 +253,30 @@ def output_fields(rows):
     return fields
 
 
+def empty_output_fields():
+    fields = csv_fields(INPUT) or LAYER3_FIELDS
+    for field in TITLE_FIELDS + COMPAT_FIELDS:
+        if field not in fields:
+            fields.append(field)
+    return fields
+
+
+def zero_candidate_input():
+    return len(read_csv(LAYER2_INPUT)) == 0
+
+
 def main():
     source_rows = read_csv(INPUT)
     if not source_rows:
-        raise SystemExit(f"Missing or empty input file: {INPUT}")
+        if INPUT.exists() or zero_candidate_input():
+            fields = empty_output_fields()
+            write_csv(OUTPUT, [], fields)
+            write_json(OUTPUT_JSON, [])
+            print("No Layer 3 metadata rows to normalise. Wrote empty title-normalised outputs.")
+            print(f"Output: {OUTPUT}")
+            print(f"JSON: {OUTPUT_JSON}")
+            return
+        raise SystemExit(f"Missing input file and Layer 2 candidates exist: {INPUT}")
     by_unified, by_title, warnings = load_mapping()
     for warning in warnings:
         print(warning)
@@ -220,11 +285,13 @@ def main():
         for row in source_rows
     ]
     write_csv(OUTPUT, normalised, output_fields(normalised))
+    write_json(OUTPUT_JSON, normalised)
     needs_review = sum(1 for row in normalised if row.get("title_needs_review") == "true")
     mapped = sum(1 for row in normalised if row.get("title_method") in {"unified_id_mapping", "title_mapping"})
     print(f"Title mapping complete: {len(normalised)} titles, {mapped} mapped, {needs_review} need review.")
     print(f"Mapping: {MAPPING}")
     print(f"Output: {OUTPUT}")
+    print(f"JSON: {OUTPUT_JSON}")
 
 
 if __name__ == "__main__":
