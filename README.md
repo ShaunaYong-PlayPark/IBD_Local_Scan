@@ -8,8 +8,9 @@ The project stores workflow data locally and serves a private local dashboard. S
 
 1. Copy `.env.example` to `.env` for local secrets.
 2. Set `SENSORTOWER_AUTH_TOKEN` in your shell or deployment environment.
-3. Copy `config/settings.example.json` to `config/settings.json`.
-4. Update report dates, ranking date, countries, or chart config in `config/settings.json` as needed.
+3. Set `APP_VIEWER_PASSWORD` and `APP_ADMIN_PASSWORD` in your shell or deployment environment.
+4. Copy `config/settings.example.json` to `config/settings.json`.
+5. Update report dates, ranking date, countries, or chart config in `config/settings.json` as needed.
 
 Do not commit `.env` or `config/settings.json`.
 
@@ -26,6 +27,15 @@ Open:
 ```text
 http://127.0.0.1:8787
 ```
+
+Private POC access is controlled by two environment variables:
+
+```powershell
+$env:APP_VIEWER_PASSWORD='your_viewer_password'
+$env:APP_ADMIN_PASSWORD='your_admin_password'
+```
+
+Viewer login can open Latest Brief, table view, Brief Archive, and Game Tracker. Admin login can also open Admin Console. Password values are never displayed by the dashboard.
 
 Optional port override:
 

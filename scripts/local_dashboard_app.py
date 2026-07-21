@@ -1,11 +1,15 @@
 ﻿
-import csv, html, io, json, os, re, subprocess, urllib.parse
+import csv, html, io, json, os, re, secrets, subprocess, urllib.parse
 from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]; APP=ROOT/'data'/'local_app'; OUT=ROOT/'data'/'output'
 CONFIG=ROOT/'config'/'settings.json'; STATE=APP/'state.json'; ST_META=APP/'extraction_metadata.json'; WATCH=APP/'watchlist.csv'; OVR=APP/'signal_overrides.csv'; HIST=APP/'change_history.csv'; SNAP=APP/'report_snapshots'
 FINAL=OUT/'final_sg_market_scan_current_workflow.csv'; DECISIONS=OUT/'current_workflow_decisions.csv'; PORT=int(os.environ.get('IBD_DASHBOARD_PORT','8787')); LAG=1
+SESSION_COOKIE='ibd_poc_session'; SESSIONS={}
+VIEWER_ROUTES={'/latest-brief','/historical-briefs','/game-tracker','/market-brief','/data-export','/calendar','/launches','/reports','/market-timeline'}
+ADMIN_ROUTES={'/admin','/review','/operations'}
+ADMIN_EXPORTS={'admin.csv','review.csv','workflow-decisions.csv'}
 WATCH_FIELDS=['unified_app_id','game_title','publisher','platform','sg_release_date','release_report_start','release_report_end','watch_until_meeting_date','status','first_top_grossing_seen_date','reported_date','notes']
 OVR_FIELDS=['unified_app_id','game_title','override_signal_type','starred','deleted','notes','approved_report_note','review_status','selected_for_report','manual_english_title','translation_review_status','translation_note','include_in_market_brief','pinned_position','featured_slot','market_brief_card_size','market_brief_order','admin_hide_from_brief','curation_updated_at','curation_updated_by','updated_at']
 HIST_FIELDS=['timestamp','user','action','unified_app_id','game_title','field','previous_value','new_value','reason']
@@ -14,6 +18,30 @@ SIGDEF={'Strong Market Signal':'SG gross revenue exceeded $1K during the report 
 SIGDIS={'Strong Market Signal':'Strong Market Signal','Early Market Signal':'Emerging Market Signal','Emerging Market Signal':'Emerging Market Signal','Watchlist':'Watchlist'}; DISP_BACK={'Strong Market Signal':'Strong Market Signal','Emerging Market Signal':'Early Market Signal','Early Market Signal':'Early Market Signal','Watchlist':'Watchlist'}
 
 def esc(x): return html.escape(str(x or ''),quote=True)
+def env_password(name): return os.environ.get(name,'')
+def cookie_parts(header):
+    out={}
+    for part in str(header or '').split(';'):
+        if '=' in part:
+            k,v=part.split('=',1); out[k.strip()]=urllib.parse.unquote(v.strip())
+    return out
+def auth_role_from_cookie(header):
+    sid=cookie_parts(header).get(SESSION_COOKIE,'')
+    return SESSIONS.get(sid,'')
+def new_session(role):
+    sid=secrets.token_urlsafe(32); SESSIONS[sid]=role; return sid
+def login_page(msg='',next_url='/latest-brief'):
+    return f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IBD Login</title><style>
+    body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f9;color:#17202a;font-family:Arial,sans-serif}}
+    main{{width:min(420px,calc(100vw - 32px));background:white;border:1px solid #d9dee5;border-radius:8px;padding:28px;box-shadow:0 12px 32px rgba(20,30,40,.08)}}
+    h1{{margin:0 0 6px;font-size:24px}} p{{color:#596575;line-height:1.5}} label{{display:block;margin:18px 0 8px;font-weight:700}}
+    input{{width:100%;box-sizing:border-box;padding:12px;border:1px solid #c8d0da;border-radius:6px;font-size:16px}}
+    button{{margin-top:16px;width:100%;padding:12px;border:0;border-radius:6px;background:#1f5eff;color:white;font-weight:700;cursor:pointer}}
+    .error{{background:#fff0f0;color:#9b1c1c;border:1px solid #f0b9b9;padding:10px;border-radius:6px}}
+    </style></head><body><main><h1>IBD Market Intelligence</h1><p>Private proof-of-concept dashboard.</p>{f'<div class="error">{esc(msg)}</div>' if msg else ''}<form method="post" action="/login"><input type="hidden" name="next" value="{esc(next_url)}"><label>Password</label><input type="password" name="password" autofocus autocomplete="current-password"><button>Sign in</button></form></main></body></html>'''
+def safe_next(value):
+    value=str(value or '/latest-brief')
+    return value if value.startswith('/') and not value.startswith('//') else '/latest-brief'
 def now(): return datetime.now().isoformat(timespec='seconds')
 def todaystamp(): return datetime.now(timezone.utc).astimezone().strftime('%d %b %Y %H:%M')
 def pdate(x):
@@ -1420,7 +1448,7 @@ NAV_ITEMS = [
 ]
 ROUTE_ALIASES = {'/':'/latest-brief','':'/latest-brief','/market-brief':'/latest-brief','/data-export':'/historical-briefs','/calendar':'/market-timeline','/launches':'/game-tracker','/reports':'/historical-briefs','/review':'/admin','/operations':'/admin'}
 
-def current_access_role(s): return s.get('current_role') or ('Admin' if s.get('current_user') in ADMINS else 'Viewer')
+def current_access_role(s): return s.get('_auth_role') or s.get('current_role') or ('Admin' if s.get('current_user') in ADMINS else 'Viewer')
 def display_name(r): return (r.get('Manual English Title') or r.get('manual_english_title') or r.get('English Display Title') or r.get('display_title') or r.get('Machine English Title') or r.get('Game Title') or r.get('Original Title') or 'Untitled Game').strip()
 def signal_label(r): return SIGDIS.get(r.get('Signal Type'), r.get('Signal Display') or r.get('Signal Type') or 'Emerging Market Signal')
 def rank_text(v): return f'#{v}' if v else 'Not ranked'
@@ -2775,7 +2803,7 @@ def layout(path,s,content):
     data_text = data_asof(rows(), p)
     topbar = f'''<header class="topbar compact-topbar slim-context-bar" aria-label="Brief context">
       <div class="inline-context"><b>{esc(active_name)}</b><span>Period: {esc(display_date_range(p.get('start'), p.get('end')) or 'Unavailable')}</span><span>Meeting: {esc(display_date(p.get('meeting')) or 'Unavailable')}</span><span>Data as of: {esc(data_text or 'N/A')}</span></div>
-      <div class="top-actions compact-actions"><a class="btn ghost" href="/historical-briefs">Previous Briefs</a><a class="btn primary" href="/latest-brief">Latest Brief</a></div>
+      <div class="top-actions compact-actions"><a class="btn ghost" href="/historical-briefs">Previous Briefs</a><a class="btn primary" href="/latest-brief">Latest Brief</a><a class="btn ghost" href="/logout">Logout</a></div>
     </header>'''
     return ui.render_template(ROOT/'templates'/'base.html', title='IBD Market Intelligence', nav=nav, topbar=topbar, content=content)
 
@@ -3083,17 +3111,49 @@ class App(BaseHTTPRequestHandler):
         if name: self.send_header('Content-Disposition',f'attachment; filename="{name}"')
         self.end_headers(); self.wfile.write(b)
     def html(self,x): self.sendb(x.encode(),'text/html; charset=utf-8')
+    def set_cookie(self,sid):
+        self.send_header('Set-Cookie',f'{SESSION_COOKIE}={urllib.parse.quote(sid)}; Path=/; HttpOnly; SameSite=Lax')
+    def clear_cookie(self):
+        self.send_header('Set-Cookie',f'{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')
     def redir(self,u,msg=''):
         if msg: u+=('&' if '?' in u else '?')+'message='+urllib.parse.quote(msg)
         self.send_response(303); self.send_header('Location',u); self.end_headers()
+    def redir_with_cookie(self,u,sid):
+        self.send_response(303); self.send_header('Location',u); self.set_cookie(sid); self.end_headers()
+    def redir_clear_cookie(self,u):
+        self.send_response(303); self.send_header('Location',u); self.clear_cookie(); self.end_headers()
     def form(self): return urllib.parse.parse_qs(self.rfile.read(int(self.headers.get('Content-Length','0'))).decode())
+    def auth_role(self): return auth_role_from_cookie(self.headers.get('Cookie',''))
+    def login_required(self,next_url,msg=''):
+        self.html(login_page(msg,safe_next(next_url)))
+    def route_allowed(self,path,role):
+        canonical=ROUTE_ALIASES.get(path,path)
+        if canonical in ADMIN_ROUTES: return role=='Admin'
+        if canonical in VIEWER_ROUTES: return role in ('Viewer','Admin')
+        return role in ('Viewer','Admin')
+    def apply_auth(self,s,role):
+        s['_auth_role']=role; s['current_role']=role; s['current_user']=role
     def do_GET(self):
         ensure(); pr=urllib.parse.urlparse(self.path); path=ROUTE_ALIASES.get(pr.path, pr.path); q=urllib.parse.parse_qs(pr.query); s=state()
         if path.startswith('/static/'): return self.static(path)
-        if path.startswith('/export/'): return self.export(path,q,s)
+        if pr.path=='/login':
+            if self.auth_role(): return self.redir('/latest-brief')
+            return self.html(login_page(q.get('message',[''])[0],q.get('next',['/latest-brief'])[0]))
+        if pr.path=='/logout':
+            sid=cookie_parts(self.headers.get('Cookie','')).get(SESSION_COOKIE,'')
+            if sid in SESSIONS: del SESSIONS[sid]
+            return self.redir_clear_cookie('/login')
+        role=self.auth_role()
+        if not role: return self.redir('/login?next='+urllib.parse.quote(self.path))
+        self.apply_auth(s,role)
+        if path.startswith('/export/'):
+            name=path.split('/')[-1]
+            if name in ADMIN_EXPORTS and role!='Admin': return self.redir('/latest-brief','Admin password required.')
+            return self.export(path,q,s)
         msg=q.get('message',[''])[0]
         pages={'/latest-brief':latest_brief,'/historical-briefs':historical_briefs,'/game-tracker':game_tracker,'/market-timeline':market_timeline,'/trends':trends_insights,'/admin':admin_console,'/market-brief':latest_brief,'/data-export':historical_briefs,'/calendar':market_timeline,'/launches':game_tracker,'/reports':historical_briefs,'/review':admin_console,'/operations':admin_console}
         if path not in pages: return self.redir('/latest-brief')
+        if not self.route_allowed(path,role): return self.redir('/latest-brief','Admin password required.')
         self.html(layout(path,s,pages[path](s,q,msg)))
     def static(self,path):
         target=(ROOT / path.lstrip('/')).resolve()
@@ -3117,6 +3177,27 @@ class App(BaseHTTPRequestHandler):
         return self.sendb((csvbytes(meta).decode('utf-8-sig')+'\n'+csvbytes(rs,fields).decode('utf-8-sig')).encode('utf-8-sig'),'text/csv; charset=utf-8',f'ibd_{kind}.csv')
     def do_POST(self):
         ensure(); pr=urllib.parse.urlparse(self.path); f=self.form(); s=state()
+        if pr.path=='/login':
+            password=(f.get('password',[''])[0] or '')
+            next_url=safe_next(f.get('next',['/latest-brief'])[0])
+            viewer=env_password('APP_VIEWER_PASSWORD'); admin=env_password('APP_ADMIN_PASSWORD')
+            if admin and secrets.compare_digest(password,admin):
+                return self.redir_with_cookie(next_url,new_session('Admin'))
+            if viewer and secrets.compare_digest(password,viewer):
+                if ROUTE_ALIASES.get(urllib.parse.urlparse(next_url).path,urllib.parse.urlparse(next_url).path) in ADMIN_ROUTES:
+                    next_url='/latest-brief'
+                return self.redir_with_cookie(next_url,new_session('Viewer'))
+            msg='Password is incorrect.' if (viewer or admin) else 'Dashboard passwords are not configured.'
+            return self.html(login_page(msg,next_url))
+        if pr.path=='/logout':
+            sid=cookie_parts(self.headers.get('Cookie','')).get(SESSION_COOKIE,'')
+            if sid in SESSIONS: del SESSIONS[sid]
+            return self.redir_clear_cookie('/login')
+        role=self.auth_role()
+        if not role: return self.login_required(pr.path)
+        self.apply_auth(s,role)
+        if pr.path in ('/update-meeting-date','/admin-signal-override','/run-scan','/set-report-status','/set-role') and role!='Admin':
+            return self.redir('/latest-brief','Admin password required.')
         try:
             if pr.path=='/update-meeting-date':
                 if current_access_role(s)!='Admin': return self.redir('/admin','Only admins can change the upcoming meeting date.')
