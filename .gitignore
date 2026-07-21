@@ -36,6 +36,7 @@ data/local_app/state.json
 data/local_app/change_history.csv
 data/local_app/signal_overrides.csv
 data/local_app/watchlist.csv
+data/local_app/admin_audit_log.csv
 
 # OS/editor noise
 .DS_Store

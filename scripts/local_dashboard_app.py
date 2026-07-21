@@ -4,21 +4,35 @@ from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]; APP=ROOT/'data'/'local_app'; OUT=ROOT/'data'/'output'
-CONFIG=ROOT/'config'/'settings.json'; STATE=APP/'state.json'; ST_META=APP/'extraction_metadata.json'; WATCH=APP/'watchlist.csv'; OVR=APP/'signal_overrides.csv'; HIST=APP/'change_history.csv'; SNAP=APP/'report_snapshots'
+CONFIG=ROOT/'config'/'settings.json'; STATE=APP/'state.json'; ST_META=APP/'extraction_metadata.json'; WATCH=APP/'watchlist.csv'; OVR=APP/'signal_overrides.csv'; HIST=APP/'change_history.csv'; AUDIT=APP/'admin_audit_log.csv'; SNAP=APP/'report_snapshots'
 FINAL=OUT/'final_sg_market_scan_current_workflow.csv'; DECISIONS=OUT/'current_workflow_decisions.csv'; PORT=int(os.environ.get('IBD_DASHBOARD_PORT','8787')); LAG=1
 SESSION_COOKIE='ibd_poc_session'; SESSIONS={}
 VIEWER_ROUTES={'/latest-brief','/historical-briefs','/game-tracker','/market-brief','/data-export','/calendar','/launches','/reports','/market-timeline'}
-ADMIN_ROUTES={'/admin','/review','/operations'}
+ADMIN_ROUTES={'/admin','/admin/audit-log','/review','/operations'}
 ADMIN_EXPORTS={'admin.csv','review.csv','workflow-decisions.csv'}
+ADMIN_PASSWORDS={'SG':'APP_ADMIN_PASSWORD_SG','TH':'APP_ADMIN_PASSWORD_TH','MY':'APP_ADMIN_PASSWORD_MY','ID':'APP_ADMIN_PASSWORD_ID','PH':'APP_ADMIN_PASSWORD_PH','VN':'APP_ADMIN_PASSWORD_VN'}
 WATCH_FIELDS=['unified_app_id','game_title','publisher','platform','sg_release_date','release_report_start','release_report_end','watch_until_meeting_date','status','first_top_grossing_seen_date','reported_date','notes']
 OVR_FIELDS=['unified_app_id','game_title','override_signal_type','starred','deleted','notes','approved_report_note','review_status','selected_for_report','manual_english_title','translation_review_status','translation_note','include_in_market_brief','pinned_position','featured_slot','market_brief_card_size','market_brief_order','admin_hide_from_brief','curation_updated_at','curation_updated_by','updated_at']
 HIST_FIELDS=['timestamp','user','action','unified_app_id','game_title','field','previous_value','new_value','reason']
+AUDIT_FIELDS=['timestamp','playpark_email','role','admin_country','action','field','old_value','new_value','path','ip_address']
 ADMINS={'Shauna','Daryl'}; ROLES={'Viewer':{'read','export'},'Contributor':{'read','export','annotate','classify','exclude'},'Admin':{'read','export','annotate','classify','exclude','run','dates','finalise','diagnostics'}}
 SIGDEF={'Strong Market Signal':'SG gross revenue exceeded $1K during the report period while appearing in SG Top Grossing.','Early Market Signal':'SG Top Grossing watchlist item below the Strong threshold.','Watchlist':'SG Top Grossing watchlist item below the Strong threshold.'}
 SIGDIS={'Strong Market Signal':'Strong Market Signal','Early Market Signal':'Emerging Market Signal','Emerging Market Signal':'Emerging Market Signal','Watchlist':'Watchlist'}; DISP_BACK={'Strong Market Signal':'Strong Market Signal','Emerging Market Signal':'Early Market Signal','Early Market Signal':'Early Market Signal','Watchlist':'Watchlist'}
 
 def esc(x): return html.escape(str(x or ''),quote=True)
 def env_password(name): return os.environ.get(name,'')
+def allowed_email_domains():
+    raw=os.environ.get('APP_ALLOWED_EMAIL_DOMAINS','playpark.com')
+    return {x.strip().lower().lstrip('@') for x in raw.split(',') if x.strip()}
+def valid_playpark_email(email):
+    email=str(email or '').strip().lower()
+    if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$',email): return False
+    return email.split('@')[-1] in allowed_email_domains()
+def admin_country_for_password(password):
+    for country,env_name in ADMIN_PASSWORDS.items():
+        value=env_password(env_name)
+        if value and secrets.compare_digest(password,value): return country
+    return ''
 def cookie_parts(header):
     out={}
     for part in str(header or '').split(';'):
@@ -27,9 +41,14 @@ def cookie_parts(header):
     return out
 def auth_role_from_cookie(header):
     sid=cookie_parts(header).get(SESSION_COOKIE,'')
-    return SESSIONS.get(sid,'')
-def new_session(role):
-    sid=secrets.token_urlsafe(32); SESSIONS[sid]=role; return sid
+    session=SESSIONS.get(sid,{})
+    return session.get('role','') if isinstance(session,dict) else session
+def session_from_cookie(header):
+    sid=cookie_parts(header).get(SESSION_COOKIE,'')
+    session=SESSIONS.get(sid,{})
+    return session if isinstance(session,dict) else {'role':session,'playpark_email':'','admin_country':''}
+def new_session(email,role,admin_country=''):
+    sid=secrets.token_urlsafe(32); SESSIONS[sid]={'playpark_email':email,'role':role,'admin_country':admin_country if role=='Admin' else ''}; return sid
 def login_page(msg='',next_url='/latest-brief'):
     return f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IBD Login</title><style>
     body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f7f9;color:#17202a;font-family:Arial,sans-serif}}
@@ -38,7 +57,7 @@ def login_page(msg='',next_url='/latest-brief'):
     input{{width:100%;box-sizing:border-box;padding:12px;border:1px solid #c8d0da;border-radius:6px;font-size:16px}}
     button{{margin-top:16px;width:100%;padding:12px;border:0;border-radius:6px;background:#1f5eff;color:white;font-weight:700;cursor:pointer}}
     .error{{background:#fff0f0;color:#9b1c1c;border:1px solid #f0b9b9;padding:10px;border-radius:6px}}
-    </style></head><body><main><h1>IBD Market Intelligence</h1><p>Private proof-of-concept dashboard.</p>{f'<div class="error">{esc(msg)}</div>' if msg else ''}<form method="post" action="/login"><input type="hidden" name="next" value="{esc(next_url)}"><label>Password</label><input type="password" name="password" autofocus autocomplete="current-password"><button>Sign in</button></form></main></body></html>'''
+    </style></head><body><main><h1>IBD Market Intelligence</h1><p>Private proof-of-concept dashboard.</p>{f'<div class="error">{esc(msg)}</div>' if msg else ''}<form method="post" action="/login"><input type="hidden" name="next" value="{esc(next_url)}"><label>PlayPark email</label><input type="email" name="email" autofocus autocomplete="email" required><label>Password</label><input type="password" name="password" autocomplete="current-password" required><button>Sign in</button></form></main></body></html>'''
 def safe_next(value):
     value=str(value or '/latest-brief')
     return value if value.startswith('/') and not value.startswith('//') else '/latest-brief'
@@ -67,6 +86,15 @@ def rc(path):
     return list(csv.DictReader(path.open(encoding='utf-8-sig',newline='')))
 def wc(path,rows,fields):
     path.parent.mkdir(parents=True,exist_ok=True); f=path.open('w',encoding='utf-8-sig',newline=''); w=csv.DictWriter(f,fieldnames=fields,extrasaction='ignore'); w.writeheader(); w.writerows(rows); f.close()
+def append_admin_audit(session,action,field,old_value,new_value,path,ip_address):
+    AUDIT.parent.mkdir(parents=True,exist_ok=True)
+    exists=AUDIT.exists()
+    with AUDIT.open('a',encoding='utf-8-sig',newline='') as f:
+        w=csv.DictWriter(f,fieldnames=AUDIT_FIELDS,extrasaction='ignore')
+        if not exists: w.writeheader()
+        w.writerow({'timestamp':now(),'playpark_email':session.get('playpark_email',''),'role':session.get('role',''),'admin_country':session.get('admin_country',''),'action':action,'field':field,'old_value':old_value,'new_value':new_value,'path':path,'ip_address':ip_address})
+def audit_rows():
+    return list(reversed(rc(AUDIT)))[0:100]
 def csvbytes(rows,fields=None):
     if fields is None:
         fields=[]
@@ -3082,12 +3110,20 @@ def admin_console(s,q,msg=''):
       <section class="admin-card simplified-admin-card">
         <h2>Upcoming Meeting Date</h2>
         <p>Change only the upcoming meeting date. The report window updates automatically from the meeting-cycle state.</p>
-        <div class="admin-meta">{meta_item('Last completed meeting', display_date(s.get('last_completed_meeting_date')))}{meta_item('Upcoming meeting', display_date(s.get('upcoming_meeting_date')))}{meta_item('Meeting time', esc(s.get('meeting_time') or '16:00') + ' SGT')}{meta_item('Current report period', display_date_range(p.get('start'), p.get('end')))}</div>
+        <div class="admin-meta">{meta_item('Signed in', esc(s.get('_playpark_email') or 'Admin'))}{meta_item('Admin country', esc(s.get('_admin_country') or 'N/A'))}{meta_item('Last completed meeting', display_date(s.get('last_completed_meeting_date')))}{meta_item('Upcoming meeting', display_date(s.get('upcoming_meeting_date')))}{meta_item('Meeting time', esc(s.get('meeting_time') or '16:00') + ' SGT')}{meta_item('Current report period', display_date_range(p.get('start'), p.get('end')))}</div>
         <form class="inline-admin-form" method="post" action="/update-meeting-date">
           <label>New upcoming meeting date <input type="date" name="upcoming_meeting_date" value="{esc(s.get('upcoming_meeting_date') or p.get('meeting') or '')}"></label>
           <button class="primary">Apply meeting date</button>
         </form>
+        <p><a class="btn" href="/admin/audit-log">View audit log</a></p>
       </section>'''
+
+def admin_audit_log_page(s,q,msg=''):
+    if current_access_role(s) != 'Admin':
+        return page_header('Admin Audit Log','Restricted area','Admin audit records are only visible to country admins.')
+    body=''.join(f'<tr><td>{esc(r.get("timestamp"))}</td><td>{esc(r.get("playpark_email"))}</td><td>{esc(r.get("role"))}</td><td>{esc(r.get("admin_country"))}</td><td>{esc(r.get("action"))}</td><td>{esc(r.get("field"))}</td><td>{esc(r.get("old_value"))}</td><td>{esc(r.get("new_value"))}</td><td>{esc(r.get("path"))}</td><td>{esc(r.get("ip_address"))}</td></tr>' for r in audit_rows())
+    return f'''{page_header('Admin Console','Audit Log','Most recent 100 successful admin changes.', '<a class="btn" href="/admin">Back to Admin</a>')}
+      <div class="data-table"><table><thead><tr><th>Timestamp</th><th>Email</th><th>Role</th><th>Country</th><th>Action</th><th>Field</th><th>Old Value</th><th>New Value</th><th>Path</th><th>IP</th></tr></thead><tbody>{body or '<tr><td colspan="10">No audit rows yet.</td></tr>'}</tbody></table></div>'''
 
 def rows_for_export_kind(kind,q,s):
     base = rows()
@@ -3124,6 +3160,7 @@ class App(BaseHTTPRequestHandler):
         self.send_response(303); self.send_header('Location',u); self.clear_cookie(); self.end_headers()
     def form(self): return urllib.parse.parse_qs(self.rfile.read(int(self.headers.get('Content-Length','0'))).decode())
     def auth_role(self): return auth_role_from_cookie(self.headers.get('Cookie',''))
+    def auth_session(self): return session_from_cookie(self.headers.get('Cookie',''))
     def login_required(self,next_url,msg=''):
         self.html(login_page(msg,safe_next(next_url)))
     def route_allowed(self,path,role):
@@ -3131,8 +3168,9 @@ class App(BaseHTTPRequestHandler):
         if canonical in ADMIN_ROUTES: return role=='Admin'
         if canonical in VIEWER_ROUTES: return role in ('Viewer','Admin')
         return role in ('Viewer','Admin')
-    def apply_auth(self,s,role):
-        s['_auth_role']=role; s['current_role']=role; s['current_user']=role
+    def apply_auth(self,s,session):
+        s['_auth_role']=session.get('role',''); s['_playpark_email']=session.get('playpark_email',''); s['_admin_country']=session.get('admin_country','')
+        s['current_role']=s['_auth_role']; s['current_user']=s['_playpark_email'] or s['_auth_role']
     def do_GET(self):
         ensure(); pr=urllib.parse.urlparse(self.path); path=ROUTE_ALIASES.get(pr.path, pr.path); q=urllib.parse.parse_qs(pr.query); s=state()
         if path.startswith('/static/'): return self.static(path)
@@ -3143,15 +3181,15 @@ class App(BaseHTTPRequestHandler):
             sid=cookie_parts(self.headers.get('Cookie','')).get(SESSION_COOKIE,'')
             if sid in SESSIONS: del SESSIONS[sid]
             return self.redir_clear_cookie('/login')
-        role=self.auth_role()
+        session=self.auth_session(); role=session.get('role','')
         if not role: return self.redir('/login?next='+urllib.parse.quote(self.path))
-        self.apply_auth(s,role)
+        self.apply_auth(s,session)
         if path.startswith('/export/'):
             name=path.split('/')[-1]
             if name in ADMIN_EXPORTS and role!='Admin': return self.redir('/latest-brief','Admin password required.')
             return self.export(path,q,s)
         msg=q.get('message',[''])[0]
-        pages={'/latest-brief':latest_brief,'/historical-briefs':historical_briefs,'/game-tracker':game_tracker,'/market-timeline':market_timeline,'/trends':trends_insights,'/admin':admin_console,'/market-brief':latest_brief,'/data-export':historical_briefs,'/calendar':market_timeline,'/launches':game_tracker,'/reports':historical_briefs,'/review':admin_console,'/operations':admin_console}
+        pages={'/latest-brief':latest_brief,'/historical-briefs':historical_briefs,'/game-tracker':game_tracker,'/market-timeline':market_timeline,'/trends':trends_insights,'/admin':admin_console,'/admin/audit-log':admin_audit_log_page,'/market-brief':latest_brief,'/data-export':historical_briefs,'/calendar':market_timeline,'/launches':game_tracker,'/reports':historical_briefs,'/review':admin_console,'/operations':admin_console}
         if path not in pages: return self.redir('/latest-brief')
         if not self.route_allowed(path,role): return self.redir('/latest-brief','Admin password required.')
         self.html(layout(path,s,pages[path](s,q,msg)))
@@ -3178,24 +3216,27 @@ class App(BaseHTTPRequestHandler):
     def do_POST(self):
         ensure(); pr=urllib.parse.urlparse(self.path); f=self.form(); s=state()
         if pr.path=='/login':
+            email=(f.get('email',[''])[0] or '').strip().lower()
             password=(f.get('password',[''])[0] or '')
             next_url=safe_next(f.get('next',['/latest-brief'])[0])
-            viewer=env_password('APP_VIEWER_PASSWORD'); admin=env_password('APP_ADMIN_PASSWORD')
-            if admin and secrets.compare_digest(password,admin):
-                return self.redir_with_cookie(next_url,new_session('Admin'))
+            if not valid_playpark_email(email):
+                return self.html(login_page('Enter a valid PlayPark email address.',next_url))
+            viewer=env_password('APP_VIEWER_PASSWORD'); admin_country=admin_country_for_password(password)
+            if admin_country:
+                return self.redir_with_cookie(next_url,new_session(email,'Admin',admin_country))
             if viewer and secrets.compare_digest(password,viewer):
                 if ROUTE_ALIASES.get(urllib.parse.urlparse(next_url).path,urllib.parse.urlparse(next_url).path) in ADMIN_ROUTES:
                     next_url='/latest-brief'
-                return self.redir_with_cookie(next_url,new_session('Viewer'))
-            msg='Password is incorrect.' if (viewer or admin) else 'Dashboard passwords are not configured.'
+                return self.redir_with_cookie(next_url,new_session(email,'Viewer',''))
+            msg='Password is incorrect.' if (viewer or any(env_password(e) for e in ADMIN_PASSWORDS.values())) else 'Dashboard passwords are not configured.'
             return self.html(login_page(msg,next_url))
         if pr.path=='/logout':
             sid=cookie_parts(self.headers.get('Cookie','')).get(SESSION_COOKIE,'')
             if sid in SESSIONS: del SESSIONS[sid]
             return self.redir_clear_cookie('/login')
-        role=self.auth_role()
+        session=self.auth_session(); role=session.get('role','')
         if not role: return self.login_required(pr.path)
-        self.apply_auth(s,role)
+        self.apply_auth(s,session)
         if pr.path in ('/update-meeting-date','/admin-signal-override','/run-scan','/set-report-status','/set-role') and role!='Admin':
             return self.redir('/latest-brief','Admin password required.')
         try:
@@ -3206,6 +3247,7 @@ class App(BaseHTTPRequestHandler):
                 previous=s.get('upcoming_meeting_date') or old.get('meeting','')
                 s['upcoming_meeting_date']=m.isoformat(); s['meeting_date']=m.isoformat(); s['active_report_start_date']=s.get('last_completed_meeting_date',''); save_state(s); sync_config(s)
                 log_change(s,'meeting_date_change','','Reporting Calendar','Upcoming Meeting Date',previous,m.isoformat(),'Upcoming meeting date changed by admin for postponement.')
+                append_admin_audit(session,'meeting_date_change','upcoming_meeting_date',previous,m.isoformat(),pr.path,self.client_address[0])
                 return self.redir('/admin','Upcoming meeting date updated. The report window was recalculated automatically.')
             if pr.path=='/admin-signal-override':
                 if current_access_role(s)!='Admin': return self.redir('/admin','Only admins can change signal grouping.')
@@ -3221,6 +3263,7 @@ class App(BaseHTTPRequestHandler):
                 row['override_signal_type']='' if signal=='system' else signal
                 row['updated_at']=now(); overrides[selected]=row; save_ovr(overrides)
                 log_change(s,'signal_grouping',selected,row.get('game_title',''),'override_signal_type',old,row.get('override_signal_type',''),'Signal grouping changed in Brief Editor.')
+                append_admin_audit(session,'signal_grouping','override_signal_type',old,row.get('override_signal_type',''),pr.path,self.client_address[0])
                 return self.redir('/admin','Signal grouping updated. Market Brief and exports now use the effective grouping.')
             if pr.path=='/set-role':
                 u=f.get('user',['Shauna'])[0]; r=f.get('role',['Viewer'])[0]; s['current_user']=u; s['current_role']='Contributor' if r=='Admin' and u not in ADMINS else r; save_state(s); return self.redir('/market-brief',f"Role switched to {s['current_role']}.")

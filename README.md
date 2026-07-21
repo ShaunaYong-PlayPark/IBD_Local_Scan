@@ -8,7 +8,7 @@ The project stores workflow data locally and serves a private local dashboard. S
 
 1. Copy `.env.example` to `.env` for local secrets.
 2. Set `SENSORTOWER_AUTH_TOKEN` in your shell or deployment environment.
-3. Set `APP_VIEWER_PASSWORD` and `APP_ADMIN_PASSWORD` in your shell or deployment environment.
+3. Set `APP_VIEWER_PASSWORD` and the country admin password variables in your shell or deployment environment.
 4. Copy `config/settings.example.json` to `config/settings.json`.
 5. Update report dates, ranking date, countries, or chart config in `config/settings.json` as needed.
 
@@ -28,14 +28,28 @@ Open:
 http://127.0.0.1:8787
 ```
 
-Private POC access is controlled by two environment variables:
+Private POC access is controlled by environment variables. Login requires a PlayPark email address and a password.
 
 ```powershell
 $env:APP_VIEWER_PASSWORD='your_viewer_password'
-$env:APP_ADMIN_PASSWORD='your_admin_password'
+$env:APP_ADMIN_PASSWORD_SG='your_sg_admin_password'
+$env:APP_ADMIN_PASSWORD_TH='your_th_admin_password'
+$env:APP_ADMIN_PASSWORD_MY='your_my_admin_password'
+$env:APP_ADMIN_PASSWORD_ID='your_id_admin_password'
+$env:APP_ADMIN_PASSWORD_PH='your_ph_admin_password'
+$env:APP_ADMIN_PASSWORD_VN='your_vn_admin_password'
+$env:APP_ALLOWED_EMAIL_DOMAINS='playpark.com'
 ```
 
-Viewer login can open Latest Brief, table view, Brief Archive, and Game Tracker. Admin login can also open Admin Console. Password values are never displayed by the dashboard.
+Viewer login can open Latest Brief, table view, Brief Archive, and Game Tracker. A country admin password opens Admin Console and records the admin country in the session. Password values are never displayed or logged by the dashboard.
+
+Successful admin date/settings changes append an audit row to:
+
+```text
+data/local_app/admin_audit_log.csv
+```
+
+Admins can view the most recent 100 rows at `/admin/audit-log`.
 
 Optional port override:
 
