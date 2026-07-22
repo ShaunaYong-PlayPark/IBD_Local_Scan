@@ -5,8 +5,8 @@
   "timezone": "Asia/Singapore",
   "weekly_candidate_capture": {
     "enabled": true,
-    "weekday": "Sunday",
-    "ranking_date_offset_days": 1
+    "weekday": "Tuesday",
+    "ranking_date_offset_days": 2
   },
   "meeting_day_final_report": {
     "enabled": true,

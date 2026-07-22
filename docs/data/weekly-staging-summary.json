@@ -1,0 +1,10 @@
+{
+  "last_weekly_extraction_run_date": "",
+  "run_timestamp_utc": "",
+  "report_start_date": "2026-07-14",
+  "report_end_date": "2026-07-27",
+  "mode": "not-run",
+  "candidate_count": null,
+  "message": "Weekly extraction data for this window remains staging until the meeting-day final report is generated.",
+  "sensor_tower_ranking_date": ""
+}

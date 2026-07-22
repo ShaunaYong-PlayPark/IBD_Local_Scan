@@ -91,6 +91,7 @@ def main():
         "latest_finalized_csv": exporter.LATEST_FINALIZED_CSV,
         "docs_final_csv": exporter.DOCS_FINAL_CSV,
         "docs_final_json": exporter.DOCS_FINAL_JSON,
+        "docs_weekly_staging_json": exporter.DOCS_WEEKLY_STAGING_JSON,
         "metadata": exporter.METADATA,
         "weekly_summary": exporter.WEEKLY_SUMMARY,
         "schedule": exporter.SCHEDULE,
@@ -111,6 +112,7 @@ def main():
         exporter.LATEST_FINALIZED_CSV = finalized / "latest_finalized_brief.csv"
         exporter.DOCS_FINAL_CSV = docs / "data" / "final_sg_market_scan_current_workflow.csv"
         exporter.DOCS_FINAL_JSON = docs / "data" / "final-report.json"
+        exporter.DOCS_WEEKLY_STAGING_JSON = docs / "data" / "weekly-staging-summary.json"
         exporter.METADATA = local_app / "extraction_metadata.json"
         exporter.WEEKLY_SUMMARY = output / "weekly_candidate_capture_summary.json"
         exporter.SCHEDULE = config / "static_report_schedule.json"
@@ -134,7 +136,19 @@ def main():
             ),
             encoding="utf-8",
         )
-        exporter.WEEKLY_SUMMARY.write_text(json.dumps({"new_or_seen_candidates": 0}), encoding="utf-8")
+        exporter.WEEKLY_SUMMARY.write_text(
+            json.dumps(
+                {
+                    "run_timestamp_utc": "2026-07-21T00:00:00+00:00",
+                    "mode": "weekly-capture",
+                    "report_start_date": "2026-07-14",
+                    "report_end_date": "2026-07-27",
+                    "ranking_date": "2026-07-19",
+                    "new_or_seen_candidates": 0,
+                }
+            ),
+            encoding="utf-8",
+        )
         exporter.SCHEDULE.parent.mkdir(parents=True, exist_ok=True)
         exporter.SCHEDULE.write_text(
             json.dumps(
@@ -152,6 +166,7 @@ def main():
         latest_html = (docs / "latest-brief.html").read_text(encoding="utf-8")
         archive_html = (docs / "historical-briefs.html").read_text(encoding="utf-8")
         payload = json.loads((docs / "data" / "final-report.json").read_text(encoding="utf-8"))
+        staging = json.loads((docs / "data" / "weekly-staging-summary.json").read_text(encoding="utf-8"))
         titles = {item["Game Title"] for item in payload["rows"]}
 
         assert_true("23 Jun 2026 to 13 Jul 2026" in latest_html, "Latest brief should show finalized July period.")
@@ -165,6 +180,9 @@ def main():
             "Staging empty state should appear outside the Latest Brief.",
         )
         assert_true(titles == {"Star Sailors", "CookieRun Classic"}, "Final JSON should contain only finalized brief rows.")
+        assert_true(staging["mode"] == "weekly-capture", "Weekly staging summary should keep mode.")
+        assert_true(staging["candidate_count"] == 0, "Weekly staging summary should keep candidate count.")
+        assert_true(staging["sensor_tower_ranking_date"] == "2026-07-19", "Weekly staging summary should keep ranking date.")
 
     exporter.DOCS = originals["docs"]
     exporter.ASSETS = originals["assets"]
@@ -173,6 +191,7 @@ def main():
     exporter.LATEST_FINALIZED_CSV = originals["latest_finalized_csv"]
     exporter.DOCS_FINAL_CSV = originals["docs_final_csv"]
     exporter.DOCS_FINAL_JSON = originals["docs_final_json"]
+    exporter.DOCS_WEEKLY_STAGING_JSON = originals["docs_weekly_staging_json"]
     exporter.METADATA = originals["metadata"]
     exporter.WEEKLY_SUMMARY = originals["weekly_summary"]
     exporter.SCHEDULE = originals["schedule"]

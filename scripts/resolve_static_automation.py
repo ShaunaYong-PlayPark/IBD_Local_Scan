@@ -49,12 +49,17 @@ def current_schedule_date(schedule):
     return datetime.now(tz).date()
 
 
-def report_dates(schedule):
+def report_dates(schedule, mode="meeting-day-final-report", today=None):
     start = parse_iso_date(schedule["last_completed_meeting_date"])
     meeting = parse_iso_date(schedule["upcoming_meeting_date"])
     end = meeting - timedelta(days=1)
-    offset = int(schedule.get("meeting_day_final_report", {}).get("ranking_date_offset_days", 1))
-    ranking = end - timedelta(days=offset)
+    if mode == "weekly-capture":
+        offset = int(schedule.get("weekly_candidate_capture", {}).get("ranking_date_offset_days", 2))
+        ranking_base = today or current_schedule_date(schedule)
+        ranking = ranking_base - timedelta(days=offset)
+    else:
+        offset = int(schedule.get("meeting_day_final_report", {}).get("ranking_date_offset_days", 1))
+        ranking = end - timedelta(days=offset)
     return start, end, ranking
 
 
@@ -66,16 +71,16 @@ def resolve_auto_mode(schedule, today):
     if meeting_config.get("enabled", True) and today == meeting:
         return "meeting-day-final-report"
 
-    weekly_day = weekday_name(weekly_config.get("weekday", "Sunday"))
+    weekly_day = weekday_name(weekly_config.get("weekday", "Tuesday"))
     if weekly_config.get("enabled", True) and today.strftime("%A").lower() == weekly_day:
         return "weekly-capture"
 
     return "static-export-only"
 
 
-def write_runtime_settings(schedule):
+def write_runtime_settings(schedule, mode="meeting-day-final-report", today=None):
     settings = read_json(SETTINGS_EXAMPLE_PATH)
-    start, end, ranking = report_dates(schedule)
+    start, end, ranking = report_dates(schedule, mode, today)
     settings["report_start_date"] = start.isoformat()
     settings["report_end_date"] = end.isoformat()
     settings["ranking_date"] = ranking.isoformat()
@@ -100,7 +105,7 @@ def main():
     schedule = read_json(SCHEDULE_PATH)
     today = current_schedule_date(schedule) if args.mode == "auto" else None
     mode = resolve_auto_mode(schedule, today) if args.mode == "auto" else args.mode
-    start, end, ranking = write_runtime_settings(schedule)
+    start, end, ranking = write_runtime_settings(schedule, mode, today)
     live_required = "true" if mode in {"weekly-capture", "meeting-day-final-report"} else "false"
 
     values = {

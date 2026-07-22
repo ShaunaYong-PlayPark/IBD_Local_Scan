@@ -20,6 +20,7 @@ FINAL_CSV = OUT / "final_sg_market_scan_current_workflow.csv"
 LATEST_FINALIZED_CSV = FINALIZED / "latest_finalized_brief.csv"
 DOCS_FINAL_CSV = DATA / "final_sg_market_scan_current_workflow.csv"
 DOCS_FINAL_JSON = DATA / "final-report.json"
+DOCS_WEEKLY_STAGING_JSON = DATA / "weekly-staging-summary.json"
 METADATA = LOCAL_APP / "extraction_metadata.json"
 WEEKLY_SUMMARY = OUT / "weekly_candidate_capture_summary.json"
 
@@ -244,6 +245,15 @@ def in_progress_period(schedule):
     return display_date(start), display_date(end)
 
 
+def schedule_report_dates(schedule):
+    start = parse_date(schedule.get("last_completed_meeting_date", ""))
+    meeting = parse_date(schedule.get("upcoming_meeting_date", ""))
+    end = meeting - timedelta(days=1) if meeting else None
+    offset = int(schedule.get("weekly_candidate_capture", {}).get("ranking_date_offset_days", 2))
+    ranking = end - timedelta(days=offset) if end else None
+    return start, end, ranking
+
+
 def staging_summary_text(weekly_summary):
     count = weekly_summary.get("new_or_seen_candidates") if isinstance(weekly_summary, dict) else None
     if count == 0:
@@ -251,6 +261,25 @@ def staging_summary_text(weekly_summary):
     if count:
         return f"{count} candidate(s) are staged for the upcoming meeting-day review."
     return "Weekly extraction data for this window remains staging until the meeting-day final report is generated."
+
+
+def weekly_staging_payload(weekly_summary, schedule):
+    start, end, ranking = schedule_report_dates(schedule)
+    candidate_count = weekly_summary.get("new_or_seen_candidates") if isinstance(weekly_summary, dict) else None
+    message = staging_summary_text(weekly_summary or {})
+    report_start = weekly_summary.get("report_start_date") or (start.isoformat() if start else "")
+    report_end = weekly_summary.get("report_end_date") or (end.isoformat() if end else "")
+    ranking_date = weekly_summary.get("ranking_date") or ((ranking.isoformat() if ranking else "") if weekly_summary else "")
+    return {
+        "last_weekly_extraction_run_date": display_date(weekly_summary.get("run_timestamp_utc", "")) if weekly_summary else "",
+        "run_timestamp_utc": weekly_summary.get("run_timestamp_utc", "") if weekly_summary else "",
+        "report_start_date": report_start,
+        "report_end_date": report_end,
+        "mode": weekly_summary.get("mode") or ("weekly-capture" if weekly_summary else "not-run"),
+        "candidate_count": candidate_count,
+        "message": message,
+        "sensor_tower_ranking_date": ranking_date,
+    }
 
 
 def data_as_of(metadata):
@@ -566,6 +595,7 @@ def same_path(left, right):
 def write_data(rows, metadata, schedule, weekly_summary=None):
     DATA.mkdir(parents=True, exist_ok=True)
     write_text(DATA / "final-report.json", json.dumps({"rows": rows, "metadata": metadata, "schedule": schedule, "staging": weekly_summary or {}}, ensure_ascii=False, indent=2))
+    write_text(DOCS_WEEKLY_STAGING_JSON, json.dumps(weekly_staging_payload(weekly_summary or {}, schedule), ensure_ascii=False, indent=2))
     source = source_finalized_csv(metadata)
     destination = DATA / "final_sg_market_scan_current_workflow.csv"
     if source.exists() and not same_path(source, destination):

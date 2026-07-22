@@ -5,7 +5,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from candidate_store import upsert_from_current_outputs
+from candidate_store import load_config, upsert_from_current_outputs
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,9 +33,14 @@ def run_script(label, script):
 
 def write_summary(current_rows, store_rows, snapshot, source):
     SUMMARY_JSON.parent.mkdir(parents=True, exist_ok=True)
+    config = load_config()
     payload = {
         "run_timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "source": source,
+        "mode": "weekly-capture",
+        "report_start_date": config.get("report_start_date", ""),
+        "report_end_date": config.get("report_end_date", ""),
+        "ranking_date": config.get("ranking_date", ""),
         "new_or_seen_candidates": len(current_rows),
         "permanent_candidate_store_rows": len(store_rows),
         "snapshot": str(snapshot),
