@@ -83,16 +83,5 @@
     },
     "notes": "Committed static-site schedule settings. Update this file by pull request/commit before running the static export."
   },
-  "staging": {
-    "run_timestamp_utc": "2026-07-22T01:43:56.482386+00:00",
-    "source": "live_weekly_capture",
-    "mode": "weekly-capture",
-    "report_start_date": "2026-07-14",
-    "report_end_date": "2026-07-27",
-    "ranking_date": "2026-07-20",
-    "new_or_seen_candidates": 2,
-    "permanent_candidate_store_rows": 3,
-    "snapshot": "/home/runner/work/IBD_Local_Scan/IBD_Local_Scan/data/candidates/snapshots/weekly_candidates_2026-07-20.csv",
-    "empty_message": ""
-  }
+  "staging": {}
 }
