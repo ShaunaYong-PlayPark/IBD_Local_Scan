@@ -11,6 +11,7 @@ EXTRACTION_METADATA_PATH = ROOT / "data" / "local_app" / "extraction_metadata.js
 
 
 STEPS = [
+    ("Capture current-week candidates into staging store", "scripts/weekly_candidate_capture.py"),
     ("Prepare report-period candidates from local store", "scripts/prepare_report_period_candidates.py"),
     ("Refresh SG Top Free/Top Grossing ranks for stored candidates", "scripts/refresh_report_period_ranks.py"),
     ("Fetch SEA6 revenue/download metrics for stored candidates", "scripts/layer4_fetch_sea6_sales_metrics.py"),

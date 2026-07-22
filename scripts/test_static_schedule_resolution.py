@@ -75,6 +75,24 @@ def main():
     assert_equal(end.isoformat(), "2026-08-03", "Postponed final report extends to day before meeting")
     assert_equal(ranking.isoformat(), "2026-08-02", "Postponed final report ranking date")
 
+    postponed_two_weeks = dict(BASE_SCHEDULE)
+    postponed_two_weeks["upcoming_meeting_date"] = "2026-08-11"
+    for checkpoint in (date(2026, 7, 21), date(2026, 7, 28), date(2026, 8, 4)):
+        assert_equal(
+            resolver.resolve_auto_mode(postponed_two_weeks, checkpoint),
+            "weekly-capture",
+            f"{checkpoint.isoformat()} should stay weekly while meeting is postponed",
+        )
+    assert_equal(
+        resolver.resolve_auto_mode(postponed_two_weeks, date(2026, 8, 11)),
+        "meeting-day-final-report",
+        "Second postponed meeting date should run final report",
+    )
+    start, end, ranking = resolver.report_dates(postponed_two_weeks, "meeting-day-final-report", date(2026, 8, 11))
+    assert_equal(start.isoformat(), "2026-07-14", "Second postponed final report keeps start date")
+    assert_equal(end.isoformat(), "2026-08-10", "Second postponed final report extends to day before meeting")
+    assert_equal(ranking.isoformat(), "2026-08-09", "Second postponed final report ranking date")
+
     print("STATIC_SCHEDULE_RESOLUTION_PASS")
 
 
