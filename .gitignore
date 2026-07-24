@@ -16,6 +16,7 @@ qa_screenshots/
 *.pyo
 *.log
 *.err
+.tmp/
 *.tmp
 *.bak
 *.swp

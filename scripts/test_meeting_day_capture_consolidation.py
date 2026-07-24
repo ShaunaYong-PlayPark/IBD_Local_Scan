@@ -1,10 +1,9 @@
 import json
-import tempfile
-from pathlib import Path
 
 import candidate_store
 import current_report_watchlist_workflow as final_workflow
 import meeting_date_final_report
+from test_temp_utils import repo_temp_dir
 
 
 def assert_true(condition, message):
@@ -136,8 +135,7 @@ def test_candidate_store_consolidation():
         "layer3": candidate_store.LAYER3_CSV,
         "layer3_5": candidate_store.LAYER3_5_CSV,
     }
-    with tempfile.TemporaryDirectory(prefix="ibd_meeting_consolidation_test_") as tmp:
-        tmp_path = Path(tmp)
+    with repo_temp_dir("ibd_meeting_consolidation_test_") as tmp_path:
         candidate_store.CONFIG_PATH = tmp_path / "settings.json"
         candidate_store.CANDIDATE_STORE_CSV = tmp_path / "weekly_candidate_store.csv"
         candidate_store.SNAPSHOT_DIR = tmp_path / "snapshots"

@@ -23,7 +23,7 @@ The production/free deployment target is now a static GitHub Pages website. The 
 - Local development dashboard: `scripts/local_dashboard_app.py` remains available for local development.
 - Viewer and country-admin authentication: retained only for the local Python dashboard, not used by static GitHub Pages.
 - Admin audit logging: retained only for local admin changes, not exposed in the static site.
-- Weekly candidate capture: stores candidate games detected from weekly workflow outputs.
+- Weekly candidate capture: stores app IDs first seen in local SG Top Grossing observation history.
 - Meeting-day final report generation: refreshes selected candidates and rebuilds the final report.
 - Sensor Tower extraction: live extraction scripts call Sensor Tower only when explicitly run.
 - Local data storage: CSV and JSON files under `data/`.
@@ -166,6 +166,12 @@ data/raw/
 Raw Sensor Tower responses. Ignored by Git.
 
 ```text
+data/candidates/sg_chart_observations.csv
+```
+
+The single append-style SG discovery ledger. It records SG Top Grossing chart observations by ranking date, platform, app ID, and rank. Seen IDs are derived from this history.
+
+```text
 backups/
 ```
 
@@ -181,9 +187,24 @@ Generated static GitHub Pages site. Contains HTML, CSS/JS assets, and report-fac
 
 Weekly candidate capture:
 
-1. Weekly workflow outputs identify candidate games.
-2. `scripts/weekly_candidate_capture.py` stores candidates in the weekly candidate store.
-3. The no-API mode `--from-existing-outputs` can update the store from existing local outputs.
+1. Layer 1 fetches the configured SG charts and records SG Top Grossing observations.
+2. An app ID is a new candidate only when it has not previously appeared in `data/candidates/sg_chart_observations.csv`.
+3. Worldwide release tags and Sensor Tower release dates are not discovery gates.
+4. Top Free ranks remain contextual evidence and do not create candidates.
+5. `scripts/weekly_candidate_capture.py` enriches and stores new candidates in the weekly candidate store.
+6. The no-API mode `--from-existing-outputs` can update the store from existing local outputs.
+
+Ranking dates must allow for two full days of Sensor Tower data lag.
+Normal discovery fails closed if the observation ledger is missing or contains no baseline data rows.
+
+One-time baseline:
+
+- `python scripts/layer1_sg_rankings_only_candidates.py --baseline-only`
+- Refuses unless the SG observation ledger has its expected header and no data rows.
+- Fetches only iOS and Android SG Games Top Grossing for the configured ranking date.
+- Requires both platform responses to be non-empty before atomically writing the ledger.
+- Creates no Layer 1 candidates and invokes no downstream enrichment.
+- Makes exactly two Sensor Tower ranking calls.
 
 Meeting-date processing:
 
@@ -279,6 +300,14 @@ scripts/weekly_candidate_capture.py
 Weekly candidate capture entry point. Supports live capture and no-API capture from existing outputs.
 
 ```text
+scripts/layer1_sg_rankings_only_candidates.py
+```
+
+SG ranking-first discovery. Preserves the legacy Layer 1 output columns, leaves `released_tag_matches` blank, and uses the local SG chart observation ledger as the sole seen-ID history.
+
+Its explicit `--baseline-only` mode seeds an empty ledger without producing candidates. The baseline is a separately approved operator action and is not an automated workflow mode.
+
+```text
 scripts/meeting_date_final_report.py
 ```
 
@@ -313,6 +342,12 @@ data/reference/master_title_mapping.csv
 ```
 
 Local title mapping file.
+
+```text
+data/candidates/sg_chart_observations.csv
+```
+
+SG Top Grossing observation history used to determine whether an app ID is first seen.
 
 ```text
 data/local_app/extraction_metadata.json

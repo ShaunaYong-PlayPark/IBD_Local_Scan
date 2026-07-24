@@ -1,7 +1,5 @@
-import tempfile
-from pathlib import Path
-
 import candidate_store
+from test_temp_utils import repo_temp_dir
 
 
 TEST_CONFIG = {
@@ -76,8 +74,8 @@ def assert_true(condition, message):
 def main():
     original_store = candidate_store.CANDIDATE_STORE_CSV
 
-    with tempfile.TemporaryDirectory(prefix="ibd_candidate_store_test_") as tmp:
-        test_store = Path(tmp) / "weekly_candidate_store_test.csv"
+    with repo_temp_dir("ibd_candidate_store_test_") as tmp:
+        test_store = tmp / "weekly_candidate_store_test.csv"
         candidate_store.CANDIDATE_STORE_CSV = test_store
 
         # Duplicate A is intentional: the permanent store should be deduped by unified_app_id.

@@ -1,12 +1,11 @@
 import csv
 import json
-import tempfile
-from pathlib import Path
 
 import layer3_5_title_normalise as title_normalise
 import candidate_store
 import weekly_candidate_capture
 import export_static_dashboard
+from test_temp_utils import repo_temp_dir
 
 
 def assert_true(condition, message):
@@ -34,8 +33,7 @@ def main():
         "candidate_snapshot_dir": candidate_store.SNAPSHOT_DIR,
     }
 
-    with tempfile.TemporaryDirectory(prefix="ibd_zero_candidate_test_") as tmp:
-        tmp_path = Path(tmp)
+    with repo_temp_dir("ibd_zero_candidate_test_") as tmp_path:
         layer2 = tmp_path / "layer2_unified_candidates.csv"
         layer3_input = tmp_path / "layer3_unique_game_metadata.csv"
         layer3_output = tmp_path / "layer3_5_title_normalised_metadata.csv"

@@ -520,7 +520,7 @@ def released_games_section(strong, emerging, view):
     strong_html = "".join(signal_card(row, "strong") for row in strong) or empty_state("No Strong releases in this brief", "No released-game item currently exceeds the Strong signal threshold for Singapore.")
     emerging_html = "".join(signal_card(row, "emerging") for row in emerging) or empty_state("No Emerging releases in this brief", "No Emerging released-game items are available for this reporting period.")
     return f"""<section class="brief-section released-games-section">
-  <div class="section-heading"><div><h2>Released Games in Singapore</h2><p>Local release performance with Sensor Tower-supported revenue, downloads, ranks, and SEA6 market context.</p></div>{toggle}</div>
+  <div class="section-heading"><div><h2>SG Top Grossing Signals</h2><p>First-observed SG Top Grossing evidence with Sensor Tower-supported revenue, downloads, ranks, and SEA6 market context.</p></div>{toggle}</div>
   <div class="cards-view" data-view="cards">
     <h3 class="signal-heading strong-heading">Strong Market Signals <span>Commercial traction is already visible.</span></h3>
     <div class="signal-grid strong-grid">{strong_html}</div>
@@ -545,7 +545,7 @@ def latest_page(rows, schedule, metadata, view="cards"):
         + summary_cards(rows)
         + executive_summary(rows)
         + released_games_section(strong, emerging, view)
-        + """<details class="methodology"><summary>Methodology and data notes</summary><p>Released Games in Singapore uses Sensor Tower-derived Singapore launch and SEA6 performance data where available. Revenue is shown as estimated gross revenue.</p></details>"""
+        + """<details class="methodology"><summary>Methodology and data notes</summary><p>Discovery uses app IDs first observed in SG Games Top Grossing history. Release dates are evidence only and are not discovery gates. Revenue is shown as estimated gross revenue from Sensor Tower where available.</p></details>"""
     )
     return page_shell("Latest Brief", "latest", body, rows, schedule, metadata)
 

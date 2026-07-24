@@ -17,6 +17,7 @@ REPORT_PERIOD_LAYER2_CSV = OUTPUT_DIR / "report_period_layer2_candidates.csv"
 LAYER2_CSV = OUTPUT_DIR / "layer2_unified_candidates.csv"
 LAYER3_CSV = OUTPUT_DIR / "layer3_unique_game_metadata.csv"
 LAYER3_5_CSV = OUTPUT_DIR / "layer3_5_title_normalised_metadata.csv"
+RANKING_FIRST_SOURCE = "SG Top Grossing first seen"
 
 
 STORE_FIELDS = [
@@ -169,7 +170,7 @@ def best_value(rows, field):
 
 def store_row_from_outputs(metadata_row, layer2_rows, config, timestamp):
     uid = metadata_row.get("unified_app_id", "")
-    source_bucket = unique_join(row.get("released_tag_matches", "") for row in layer2_rows) or config.get("released_tag_name", "")
+    source_bucket = unique_join(row.get("released_tag_matches", "") for row in layer2_rows) or RANKING_FIRST_SOURCE
     ranking_date = best_value(layer2_rows, "ranking_date") or config.get("ranking_date", "")
     extraction_date = ranking_date or today_iso()
     detection_event = {

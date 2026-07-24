@@ -1,10 +1,6 @@
 {
   "ranking_date": "2026-07-26",
   "country": "SG",
-  "released_tag_name": "Released Days Ago (WW)",
-  "released_tag_values": [
-    "~ 1 week"
-  ],
   "platforms": {
     "ios": {
       "app_id_type": "itunes",
@@ -25,7 +21,7 @@
   },
   "report_start_date": "2026-07-14",
   "report_end_date": "2026-07-27",
-  "sensor_tower_lag_days": 1,
+  "sensor_tower_lag_days": 2,
   "sea6_countries": [
     "SG",
     "MY",

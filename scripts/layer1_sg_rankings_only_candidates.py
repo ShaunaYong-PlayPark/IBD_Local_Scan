@@ -1,12 +1,14 @@
+import argparse
 import csv
 import json
 import os
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -14,8 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "settings.json"
 RAW_DIR = ROOT / "data" / "raw"
 OUTPUT_DIR = ROOT / "data" / "output"
-WATCHLIST_CSV = ROOT / "data" / "local_app" / "watchlist.csv"
+OBSERVATION_LEDGER_CSV = ROOT / "data" / "candidates" / "sg_chart_observations.csv"
 API_BASE = "https://api.sensortower.com"
+DISCOVERY_SOURCE = "SG Top Grossing first seen"
+OBSERVATION_FIELDS = [
+    "run_timestamp_utc",
+    "ranking_date",
+    "country",
+    "platform",
+    "chart_type",
+    "chart_label",
+    "app_id",
+    "rank",
+]
 
 
 def load_config():
@@ -67,26 +80,15 @@ def normalize_id(value):
     return str(value).strip()
 
 
-def split_ids(value):
-    if not value:
-        return []
-    return [part.strip() for part in str(value).replace(",", ";").split(";") if part.strip()]
-
-
-def active_watchlist_ids_by_platform():
-    rows = read_csv(WATCHLIST_CSV)
-    ids_by_platform = {"ios": set(), "android": set()}
-    for row in rows:
-        if row.get("status") != "Watching":
-            continue
-        for app_id in split_ids(row.get("ios_app_ids", "")):
-            ids_by_platform["ios"].add(normalize_id(app_id))
-        for app_id in split_ids(row.get("android_app_ids", "")):
-            ids_by_platform["android"].add(normalize_id(app_id))
-    return ids_by_platform
-
-
-def fetch_ranking_ids(platform, platform_config, chart_type, country, ranking_date, auth_token):
+def fetch_ranking_ids(
+    platform,
+    platform_config,
+    chart_type,
+    country,
+    ranking_date,
+    auth_token,
+    save_raw_response=True,
+):
     payload = request_json(
         f"/v1/{platform}/ranking",
         {
@@ -98,7 +100,8 @@ def fetch_ranking_ids(platform, platform_config, chart_type, country, ranking_da
         },
     )
 
-    save_raw(f"layer1_rankings_only_{platform}_{country}_{chart_type}_{ranking_date}.json", payload)
+    if save_raw_response:
+        save_raw(f"layer1_rankings_only_{platform}_{country}_{chart_type}_{ranking_date}.json", payload)
 
     ranking = payload.get("ranking", [])
     positions = {}
@@ -107,57 +110,216 @@ def fetch_ranking_ids(platform, platform_config, chart_type, country, ranking_da
     return positions
 
 
-def fetch_released_tag_ids(platform, platform_config, tag_name, tag_value, auth_token):
-    payload = request_json(
-        "/v1/app_tag/apps",
-        {
-            "app_id_type": platform_config["app_id_type"],
-            "name": tag_name,
-            "value": tag_value,
-            "global": "true",
-            "auth_token": auth_token,
-        },
+def observation_key(row):
+    return (
+        row.get("ranking_date", ""),
+        row.get("country", ""),
+        row.get("platform", ""),
+        row.get("chart_type", ""),
+        normalize_id(row.get("app_id", "")),
     )
 
-    safe_value = tag_value.replace(" ", "_").replace("~", "approx").replace(">", "gt")
-    save_raw(f"layer1_released_days_ww_{platform}_{safe_value}.json", payload)
 
-    if isinstance(payload, list):
-        values = payload
-    elif isinstance(payload, dict):
-        values = (
-            payload.get("apps")
-            or payload.get("app_ids")
-            or payload.get("ids")
-            or payload.get("data")
-            or []
+def seen_app_ids(observations, country):
+    seen = {"ios": set(), "android": set()}
+    for row in observations:
+        platform = row.get("platform", "")
+        app_id = normalize_id(row.get("app_id", ""))
+        chart_type = row.get("chart_type", "")
+        if (
+            row.get("country", "").upper() == country.upper()
+            and platform in seen
+            and "gross" in chart_type.lower()
+            and app_id
+        ):
+            seen[platform].add(app_id)
+    return seen
+
+
+def merge_observations(existing_rows, current_rows):
+    merged = {observation_key(row): row for row in existing_rows if row.get("app_id")}
+    for row in current_rows:
+        merged[observation_key(row)] = row
+    return sorted(
+        merged.values(),
+        key=lambda row: (
+            row.get("ranking_date", ""),
+            row.get("country", ""),
+            row.get("platform", ""),
+            row.get("chart_type", ""),
+            int(row.get("rank") or 999999),
+            row.get("app_id", ""),
+        ),
+    )
+
+
+def write_observation_ledger(rows, path=OBSERVATION_LEDGER_CSV):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8-sig",
+            newline="",
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            writer = csv.DictWriter(handle, fieldnames=OBSERVATION_FIELDS, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(temporary_path, path)
+    except Exception:
+        if temporary_path and temporary_path.exists():
+            temporary_path.unlink()
+        raise
+    return path
+
+
+def read_baseline_ledger(path=OBSERVATION_LEDGER_CSV):
+    if not path.exists():
+        raise RuntimeError(f"Baseline ledger does not exist: {path}")
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if list(reader.fieldnames or []) != OBSERVATION_FIELDS:
+            raise RuntimeError("Baseline ledger header does not match the SG observation schema.")
+        return list(reader)
+
+
+def read_required_discovery_ledger(path=OBSERVATION_LEDGER_CSV):
+    rows = read_baseline_ledger(path)
+    if not rows:
+        raise RuntimeError(
+            "Normal discovery refused: SG chart observation ledger has no baseline rows. "
+            "Run --baseline-only as the separately approved seeding step first."
         )
-    else:
-        values = []
+    return rows
 
-    ids = set()
-    for item in values:
-        if isinstance(item, dict):
-            app_id = (
-                item.get("app_id")
-                or item.get("itunes_app_id")
-                or item.get("android_app_id")
-                or item.get("id")
+
+def validate_baseline_ranking_date(config, today=None):
+    try:
+        lag_days = int(config.get("sensor_tower_lag_days", 2))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("sensor_tower_lag_days must be an integer of at least 2.") from exc
+    if lag_days < 2:
+        raise RuntimeError("Baseline requires at least two full days of Sensor Tower lag.")
+
+    try:
+        ranking_date = date.fromisoformat(str(config["ranking_date"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("Baseline requires a valid configured ranking_date.") from exc
+
+    singapore_today = today or datetime.now(timezone(timedelta(hours=8))).date()
+    latest_allowed = singapore_today - timedelta(days=lag_days)
+    if ranking_date > latest_allowed:
+        raise RuntimeError(
+            f"Configured ranking_date {ranking_date.isoformat()} is too recent; "
+            f"latest allowed is {latest_allowed.isoformat()} for a {lag_days}-day lag."
+        )
+    return ranking_date.isoformat()
+
+
+def baseline_top_grossing_chart(platform, platform_config):
+    matches = [
+        (chart_type, chart_label)
+        for chart_type, chart_label in platform_config.get("charts", {}).items()
+        if "gross" in chart_type.lower()
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"Baseline requires exactly one configured Top Grossing chart for {platform}."
+        )
+    return matches[0]
+
+
+def run_baseline_only(
+    config,
+    ranking_fetcher=None,
+    ledger_path=OBSERVATION_LEDGER_CSV,
+    today=None,
+):
+    existing_rows = read_baseline_ledger(ledger_path)
+    if existing_rows:
+        raise RuntimeError("Baseline refused: SG chart observation ledger already has data rows.")
+
+    country = str(config.get("country", "")).upper()
+    if country != "SG":
+        raise RuntimeError("Baseline-only mode supports SG only.")
+    ranking_date = validate_baseline_ranking_date(config, today=today)
+    if ranking_fetcher is None:
+        def ranking_fetcher(
+            platform,
+            platform_config,
+            chart_type,
+            country,
+            ranking_date,
+            auth_token,
+        ):
+            return fetch_ranking_ids(
+                platform,
+                platform_config,
+                chart_type,
+                country,
+                ranking_date,
+                auth_token,
+                save_raw_response=False,
             )
-        else:
-            app_id = item
-        if app_id:
-            ids.add(normalize_id(app_id))
-    return ids
+    auth_token = config["auth_token"]
+    run_timestamp = datetime.now(timezone.utc).isoformat()
+    observations = []
+
+    # Fetch both complete platform baselines before writing the ledger.
+    for platform in ("ios", "android"):
+        platform_config = config.get("platforms", {}).get(platform)
+        if not platform_config:
+            raise RuntimeError(f"Baseline requires {platform} platform configuration.")
+        chart_type, chart_label = baseline_top_grossing_chart(platform, platform_config)
+        positions = ranking_fetcher(
+            platform,
+            platform_config,
+            chart_type,
+            country,
+            ranking_date,
+            auth_token,
+        )
+        if not positions:
+            raise RuntimeError(
+                f"Baseline refused: {platform} SG Top Grossing response was empty."
+            )
+        for app_id, rank in positions.items():
+            observations.append(
+                {
+                    "run_timestamp_utc": run_timestamp,
+                    "ranking_date": ranking_date,
+                    "country": country,
+                    "platform": platform,
+                    "chart_type": chart_type,
+                    "chart_label": chart_label,
+                    "app_id": normalize_id(app_id),
+                    "rank": rank,
+                }
+            )
+
+    write_observation_ledger(observations, ledger_path)
+    return [], observations, ledger_path
 
 
-def build_candidates(config):
+def build_candidates(config, ranking_fetcher=None, existing_observations=None):
+    ranking_fetcher = ranking_fetcher or fetch_ranking_ids
     auth_token = config["auth_token"]
     country = config["country"]
+    if country.upper() != "SG":
+        raise ValueError("Ranking-first discovery Phase 1 supports SG only.")
     ranking_date = config["ranking_date"]
-    released_tag_name = config.get("released_tag_name", "Released Days Ago (WW)")
-    released_tag_values = config.get("released_tag_values", ["~ 1 week", "~ 2 weeks"])
-    watchlist_ids = active_watchlist_ids_by_platform()
+    prior_observations = (
+        list(existing_observations)
+        if existing_observations is not None
+        else read_required_discovery_ledger(OBSERVATION_LEDGER_CSV)
+    )
+    seen_before = seen_app_ids(prior_observations, country)
+    current_observations = []
     candidates_by_key = {}
     run_timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -165,20 +327,9 @@ def build_candidates(config):
         print(f"Fetching SG rankings for {platform}...")
         chart_positions = {}
         for chart_type, chart_label in platform_config["charts"].items():
-            chart_positions[chart_type] = fetch_ranking_ids(
+            chart_positions[chart_type] = ranking_fetcher(
                 platform, platform_config, chart_type, country, ranking_date, auth_token
             )
-            time.sleep(0.25)
-
-        print(f"Fetching WW recent-release buckets for {platform}...")
-        released_ids = {}
-        recent_release_ids = set()
-        for tag_value in released_tag_values:
-            ids = fetch_released_tag_ids(
-                platform, platform_config, released_tag_name, tag_value, auth_token
-            )
-            released_ids[tag_value] = ids
-            recent_release_ids.update(ids)
             time.sleep(0.25)
 
         top_grossing_chart_types = [
@@ -188,35 +339,39 @@ def build_candidates(config):
         ]
         top_grossing_ids = set()
         for chart_type in top_grossing_chart_types:
-            top_grossing_ids.update(chart_positions.get(chart_type, {}).keys())
+            chart_label = platform_config["charts"][chart_type]
+            positions = chart_positions.get(chart_type, {})
+            top_grossing_ids.update(positions.keys())
+            for app_id, rank in positions.items():
+                current_observations.append(
+                    {
+                        "run_timestamp_utc": run_timestamp,
+                        "ranking_date": ranking_date,
+                        "country": country,
+                        "platform": platform,
+                        "chart_type": chart_type,
+                        "chart_label": chart_label,
+                        "app_id": app_id,
+                        "rank": rank,
+                    }
+                )
 
         # Discovery rule:
-        #   Recently released globally + currently visible in SG Top Grossing.
+        #   First appearance in the local SG Top Grossing observation history.
+        # Sensor Tower release dates and worldwide release tags are not gates.
         # Top Free is still fetched and recorded later, but it does not create candidates.
-        discovered_ids = top_grossing_ids & recent_release_ids
-        watchlist_followup_ids = top_grossing_ids & watchlist_ids.get(platform, set())
-        all_candidate_ids = discovered_ids | watchlist_followup_ids
+        discovered_ids = top_grossing_ids - seen_before.get(platform, set())
         print(
-            f"{platform}: {len(discovered_ids)} new recent candidates and "
-            f"{len(watchlist_followup_ids)} watchlist follow-ups in SG Top Grossing."
+            f"{platform}: {len(discovered_ids)} app IDs first seen in local "
+            "SG Top Grossing history."
         )
 
-        for app_id in all_candidate_ids:
+        for app_id in discovered_ids:
             key = (platform, app_id)
-            matched_tags = [
-                tag_value
-                for tag_value, ids in released_ids.items()
-                if app_id in ids
-            ]
             candidate_reason = (
-                "Recently released globally and appeared in SG Games Top Grossing; "
+                f"{DISCOVERY_SOURCE}; "
                 "Top Free rank recorded only if present"
             )
-            if app_id in watchlist_followup_ids and app_id not in discovered_ids:
-                candidate_reason = (
-                    "Active watchlist follow-up still appearing in SG Games Top Grossing; "
-                    "Top Free rank recorded only if present"
-                )
             chart_details = []
             chart_matches = []
             best_rank = None
@@ -243,7 +398,7 @@ def build_candidates(config):
                 "country": country,
                 "platform": platform,
                 "app_id": app_id,
-                "released_tag_matches": "; ".join(matched_tags),
+                "released_tag_matches": "",
                 "sg_chart_matches": "; ".join(chart_matches),
                 "best_sg_rank": best_rank or "",
                 "candidate_reason": candidate_reason,
@@ -256,7 +411,11 @@ def build_candidates(config):
         output_row["chart_match_details_json"] = json.dumps(row["chart_match_details"], ensure_ascii=False)
         rows.append(output_row)
 
-    return sorted(rows, key=lambda row: (row["platform"], int(row["best_sg_rank"] or 999999), row["app_id"]))
+    candidates = sorted(
+        rows,
+        key=lambda row: (row["platform"], int(row["best_sg_rank"] or 999999), row["app_id"]),
+    )
+    return candidates, merge_observations(prior_observations, current_observations)
 
 
 def write_outputs(candidates):
@@ -288,15 +447,33 @@ def write_outputs(candidates):
     return csv_path, json_path
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="SG ranking-first Layer 1 discovery.")
+    parser.add_argument(
+        "--baseline-only",
+        action="store_true",
+        help="Seed an empty SG Top Grossing observation ledger without creating candidates.",
+    )
+    args = parser.parse_args(argv)
     config = load_config()
-    candidates = build_candidates(config)
+    if args.baseline_only:
+        candidates, observations, ledger_path = run_baseline_only(config)
+        print("")
+        print("SG Top Grossing baseline complete.")
+        print(f"Candidates created: {len(candidates)}")
+        print(f"Observations written: {len(observations)}")
+        print(f"Observation ledger: {ledger_path}")
+        return
+
+    candidates, observations = build_candidates(config)
     csv_path, json_path = write_outputs(candidates)
+    ledger_path = write_observation_ledger(observations)
 
     print("")
-    print(f"Done. Found {len(candidates)} recent WW-release app IDs in SG Top Grossing.")
+    print(f"Done. Found {len(candidates)} app IDs first seen in SG Top Grossing history.")
     print(f"CSV: {csv_path}")
     print(f"JSON: {json_path}")
+    print(f"Observation ledger: {ledger_path}")
 
 
 if __name__ == "__main__":

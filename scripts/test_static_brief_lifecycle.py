@@ -1,9 +1,8 @@
 import csv
 import json
-import tempfile
-from pathlib import Path
 
 import export_static_dashboard as exporter
+from test_temp_utils import repo_temp_dir
 
 
 FIELDS = [
@@ -97,8 +96,7 @@ def main():
         "schedule": exporter.SCHEDULE,
     }
 
-    with tempfile.TemporaryDirectory(prefix="ibd_static_lifecycle_test_") as tmp:
-        tmp_path = Path(tmp)
+    with repo_temp_dir("ibd_static_lifecycle_test_") as tmp_path:
         docs = tmp_path / "docs"
         output = tmp_path / "data" / "output"
         finalized = tmp_path / "data" / "finalized_briefs"

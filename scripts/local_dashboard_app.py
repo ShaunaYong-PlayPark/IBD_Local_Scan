@@ -2875,10 +2875,10 @@ def historical_briefs(s,q,msg=''):
 market_timeline = historical_briefs
 calendar_page = historical_briefs
 
-# --- Top Grossing + WW recent-release workflow display override ---
-# The current workflow uses SG Top Grossing as the discovery signal, WW Released
-# Days Ago buckets as the recency signal, and SG gross revenue as the Strong
-# threshold. SG country release date is evidence only.
+# --- SG Top Grossing first-observed workflow display override ---
+# The current workflow uses first-observed SG Top Grossing history as the
+# discovery signal and SG gross revenue as the Strong threshold. Release dates
+# are evidence only.
 
 def workflow_signal_group(r):
     return 'strong' if r.get('Signal Type') == 'Strong Market Signal' else 'monitoring'
@@ -2897,7 +2897,7 @@ def executive_summary_bullets(rs):
         if sf(r.get('SG Gross Revenue')) > 0 or sg_downloads_value(r) > 0 or market_entries(r):
             st_available += 1
     bullets = [
-        f"{total} SG Top Grossing recent-release candidate{'s' if total != 1 else ''} are included in this brief.",
+        f"{total} first-observed SG Top Grossing candidate{'s' if total != 1 else ''} are included in this brief.",
         f"{len(strong)} title{'s' if len(strong) != 1 else ''} exceeded $1K estimated SG gross revenue during the report period.",
     ]
     if monitoring:
@@ -2921,11 +2921,11 @@ def released_games_section(strong,emerging,view):
     table_href = _query('/latest-brief', {**base, 'view':'table'})
     toggle=f'<div class="view-toggle" aria-label="Released games view"><a class="{ "active" if view!="table" else "" }" href="{esc(card_href)}" aria-current="{ "true" if view!="table" else "false" }">Card view</a><a class="{ "active" if view=="table" else "" }" href="{esc(table_href)}" aria-current="{ "true" if view=="table" else "false" }">Compact table</a></div>'
     count = len(strong) + len(emerging)
-    count_line = result_bar('released-game records', count, count, 'Discovery is based on SG Top Grossing + WW recent-release buckets. Top Free is recorded only for rank context.')
+    count_line = result_bar('candidate records', count, count, 'Discovery is based on first-observed SG Top Grossing history. Top Free is recorded only for rank context.')
     if view=='table':
-        return f'<section class="brief-section"><div class="section-heading"><div><h2>Released Games in Singapore</h2><p>Recently released games with SG Top Grossing evidence. Top SEA6 markets are ranked by gross revenue and include downloads.</p></div>{toggle}</div>{count_line}{compact_public_table(strong+emerging)}</section>'
+        return f'<section class="brief-section"><div class="section-heading"><div><h2>SG Top Grossing Signals</h2><p>First-observed SG Top Grossing evidence with release dates retained as supporting context. Top SEA6 markets are ranked by gross revenue and include downloads.</p></div>{toggle}</div>{count_line}{compact_public_table(strong+emerging)}</section>'
     strong_body=''.join(signal_card(r,'strong') for r in strong) or empty_state('No Strong releases in this brief','No included title exceeded $1K estimated SG gross revenue during the report period.')
-    return f'''<section class="brief-section"><div class="section-heading"><div><h2>Released Games in Singapore</h2><p>Recently released games with SG Top Grossing evidence. Top SEA6 markets are ranked by gross revenue and include downloads.</p></div>{toggle}</div>{count_line}
+    return f'''<section class="brief-section"><div class="section-heading"><div><h2>SG Top Grossing Signals</h2><p>First-observed SG Top Grossing evidence with release dates retained as supporting context. Top SEA6 markets are ranked by gross revenue and include downloads.</p></div>{toggle}</div>{count_line}
         <div class="signal-heading"><h3>Strong</h3><span>{len(strong)} shown · SG gross revenue exceeded $1K during the report period.</span></div><div class="signal-grid">{strong_body}</div>
     </section>'''
 
@@ -2969,13 +2969,13 @@ def latest_brief(s,q,msg=''):
     monitoring = sorted([r for r in rs if workflow_signal_group(r) != 'strong'], key=lambda r:(-sf(r.get('SG Gross Revenue')),best_rank_strength(r),r.get('Release Date','')))
     detail = detail_panel(selected,rs)
     actions = '<a class="btn primary" href="/export/print.html">Print Report</a><a class="btn" href="/export/executive.csv">Export CSV</a>'
-    headline = f'{len(rs)} SG Top Grossing recent-release candidate{"s" if len(rs)!=1 else ""} are included: {len(strong)} strong signal{"s" if len(strong)!=1 else ""} and {len(monitoring)} watchlist item{"s" if len(monitoring)!=1 else ""}.'
+    headline = f'{len(rs)} first-observed SG Top Grossing candidate{"s" if len(rs)!=1 else ""} are included: {len(strong)} strong signal{"s" if len(strong)!=1 else ""} and {len(monitoring)} watchlist item{"s" if len(monitoring)!=1 else ""}.'
     demo_note = '<div class="state-note">Demo/sample period: this view reuses local records only to prove switching behavior.</div>' if rec.get('demo') else ''
     page = f'''{page_header('Market Brief','Singapore Gaming Market',headline,actions)}
         {brief_selector_widget(rec)}{demo_note}
         <section class="brief-section executive-section"><div class="section-heading"><div><h2>Executive Summary</h2><p>Factual updates based on SG Top Grossing visibility and Sensor Tower market estimates.</p></div></div><ul class="executive-bullets">{executive_summary_bullets(rs)}</ul></section>
         {global_announcement_cards(rs)}{released_games_section(strong,monitoring,view)}{combined_watchlist_section(monitoring)}{local_trends_section(rs)}
-        <details class="methodology"><summary>Methodology and data notes</summary><p>Discovery uses SG Games Top Grossing plus Sensor Tower Released Days Ago (WW) buckets for approximately one-week and two-week global recency. SG Top Free ranks are recorded for dashboard context only and do not drive inclusion. SG country release date is recorded as evidence, but it is not used as an exclusion gate because it may be early or late. Strong means estimated SG gross revenue exceeded $1K during the report period. Watchlist means potential report candidates that do not currently meet Strong criteria. Market watchlist items are monitored for up to 3 periods. Announcement watchlist items should be tracked around the launch timing mentioned by the news source and removed if no SG Top Grossing signal appears within ±2 reporting periods. Revenue is shown as estimated gross revenue. Top SEA6 markets are ranked by gross revenue and include downloads where available.</p><p><a href="{AI_NEWS_RADAR_URL}" target="_blank" rel="noopener">Open AI News Radar</a></p></details>'''
+        <details class="methodology"><summary>Methodology and data notes</summary><p>Discovery uses app IDs first observed in SG Games Top Grossing history. SG Top Free ranks are recorded for dashboard context only and do not drive inclusion. SG country release date and global release date are retained as evidence, but they are not discovery gates. Strong means estimated SG gross revenue exceeded $1K during the report period. Watchlist means potential report candidates that do not currently meet Strong criteria. Market watchlist items are monitored for up to 3 periods. Announcement watchlist items should be tracked around the launch timing mentioned by the news source and removed if no SG Top Grossing signal appears within ±2 reporting periods. Revenue is shown as estimated gross revenue. Top SEA6 markets are ranked by gross revenue and include downloads where available.</p><p><a href="{AI_NEWS_RADAR_URL}" target="_blank" rel="noopener">Open AI News Radar</a></p></details>'''
     return f'<div class="detail-layout"><div>{page}</div>{detail}</div>' if detail else page
 
 
@@ -3087,12 +3087,12 @@ def latest_brief(s,q,msg=''):
     strong = sorted([r for r in rs if workflow_signal_group(r) == 'strong'], key=lambda r:-sf(r.get('SG Gross Revenue')))
     monitoring = sorted([r for r in rs if workflow_signal_group(r) != 'strong'], key=lambda r:(-sf(r.get('SG Gross Revenue')),best_rank_strength(r),r.get('Release Date','')))
     actions = '<a class="btn primary" href="/export/print.html">Print Report</a><a class="btn" href="/export/executive.csv">Export CSV</a>'
-    headline = f'{len(rs)} SG Top Grossing recent-release candidate{"s" if len(rs)!=1 else ""} are included: {len(strong)} strong signal{"s" if len(strong)!=1 else ""} and {len(monitoring)} watchlist item{"s" if len(monitoring)!=1 else ""}.'
+    headline = f'{len(rs)} first-observed SG Top Grossing candidate{"s" if len(rs)!=1 else ""} are included: {len(strong)} strong signal{"s" if len(strong)!=1 else ""} and {len(monitoring)} watchlist item{"s" if len(monitoring)!=1 else ""}.'
     page = f'''{page_header('Market Brief','Singapore Gaming Market',headline,actions)}
         {brief_selector_widget(rec)}
         <section class="brief-section executive-section"><div class="section-heading"><div><h2>Executive Summary</h2><p>System-generated factual summary from the current workflow data.</p></div></div><ul class="executive-bullets">{executive_summary_bullets(rs)}</ul></section>
         {global_announcement_cards(rs)}{released_games_section(strong,monitoring,view)}{combined_watchlist_section(monitoring)}{local_trends_section(rs)}
-        <details class="methodology"><summary>Methodology and data notes</summary><p>The Market Brief is generated automatically from the local workflow output. Discovery uses SG Games Top Grossing plus Sensor Tower Released Days Ago (WW) buckets for approximately one-week and two-week global recency. SG Top Free ranks are recorded for dashboard context only and do not drive inclusion. SG country release date is recorded as evidence, not an exclusion gate. Strong means estimated SG gross revenue exceeded $1K during the report period. Watchlist means a pulled or announcement-mentioned candidate does not currently meet Strong criteria. Top SEA6 markets are ranked by gross revenue and include downloads where available.</p><p><a href="{AI_NEWS_RADAR_URL}" target="_blank" rel="noopener">Open AI News Radar</a></p></details>'''
+        <details class="methodology"><summary>Methodology and data notes</summary><p>The Market Brief is generated automatically from the local workflow output. Discovery uses app IDs first observed in SG Games Top Grossing history. SG Top Free ranks are recorded for dashboard context only and do not drive inclusion. SG country release date and global release date are retained as evidence, not discovery gates. Strong means estimated SG gross revenue exceeded $1K during the report period. Watchlist means a pulled or announcement-mentioned candidate does not currently meet Strong criteria. Top SEA6 markets are ranked by gross revenue and include downloads where available.</p><p><a href="{AI_NEWS_RADAR_URL}" target="_blank" rel="noopener">Open AI News Radar</a></p></details>'''
     return page
 
 def admin_signal_value(r):

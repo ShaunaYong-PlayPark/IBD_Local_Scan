@@ -17,6 +17,8 @@ Weekly extraction data is staging only. It does not replace the Latest Brief. A 
 
 The project stores workflow data locally and exports a static GitHub Pages dashboard. Sensor Tower API calls are only made by the live extraction scripts. Offline tests and static dashboard rendering do not call Sensor Tower.
 
+SG discovery is ranking-first. An app becomes a candidate when its app ID appears in SG Games Top Grossing and has not previously appeared in the local SG chart observation ledger. Sensor Tower worldwide release tags and release dates are evidence only; they are not discovery gates. Ranking dates should allow for two full days of Sensor Tower data lag.
+
 ## Setup
 
 1. Copy `.env.example` to `.env` for local secrets.
@@ -131,6 +133,24 @@ The permanent candidate store is:
 data/candidates/weekly_candidate_store.csv
 ```
 
+SG Top Grossing observations are retained in the single discovery ledger:
+
+```text
+data/candidates/sg_chart_observations.csv
+```
+
+Seen app IDs are derived from this ledger. On a live run, Layer 1 still records configured Top Free ranks for context, but only SG Top Grossing observations create first-seen candidates.
+
+Normal discovery refuses to run if this ledger is missing or contains only the header row. `--baseline-only` is the only mode allowed to seed an empty ledger.
+
+Before the first live ranking-first capture, seed the empty ledger with the explicitly approved baseline command:
+
+```powershell
+python scripts/layer1_sg_rankings_only_candidates.py --baseline-only
+```
+
+Baseline-only mode requires an empty ledger and a ranking date at least two full days behind the Singapore run date. It fetches only iOS and Android SG Games Top Grossing, requires both responses to be non-empty, atomically writes the ledger, and creates no Layer 1 candidates. It makes exactly two Sensor Tower ranking calls and does not run downstream enrichment.
+
 Weekly snapshots are written to:
 
 ```text
@@ -160,6 +180,12 @@ data/local_app/extraction_metadata.json
 That metadata drives the dashboard `Data as of` label.
 
 ## No-API Validation
+
+Ranking-first discovery, including a hard network guard:
+
+```powershell
+python scripts/test_ranking_first_discovery.py
+```
 
 Candidate-store simulation:
 

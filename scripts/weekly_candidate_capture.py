@@ -53,7 +53,7 @@ def write_summary(current_rows, store_rows, snapshot, source):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Capture weekly SG Top Grossing x Released Days Ago WW candidates into the permanent local store."
+        description="Capture app IDs first seen in local SG Top Grossing history into the permanent store."
     )
     parser.add_argument(
         "--from-existing-outputs",
