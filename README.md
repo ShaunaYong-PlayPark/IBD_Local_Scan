@@ -139,7 +139,7 @@ SG Top Grossing observations are retained in the single discovery ledger:
 data/candidates/sg_chart_observations.csv
 ```
 
-Seen app IDs are derived from this ledger. On a live run, Layer 1 still records configured Top Free ranks for context, but only SG Top Grossing observations create first-seen candidates.
+Seen app IDs are derived from this ledger. On a routine live run, Layer 1 fetches only SG Top Grossing charts. Top Free rank context is optional and disabled by default; only SG Top Grossing observations create first-seen candidates.
 
 Normal discovery refuses to run if this ledger is missing or contains only the header row. `--baseline-only` is the only mode allowed to seed an empty ledger.
 

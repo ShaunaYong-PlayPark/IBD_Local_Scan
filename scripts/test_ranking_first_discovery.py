@@ -155,7 +155,39 @@ def main():
             all("gross" in row["chart_type"].lower() for row in observations),
             "The ledger must contain only Top Grossing observations",
         )
-        assert_equal(len(fetch_calls), 4, "Offline fixture should cover configured ranking calls")
+        assert_equal(
+            fetch_calls,
+            [
+                ("ios", "topgrossingapplications", "SG", "2026-07-22"),
+                ("android", "topgrossing", "SG", "2026-07-22"),
+            ],
+            "Normal discovery should fetch only the two Top Grossing ranking calls",
+        )
+
+        top_free_config = fixture_config()
+        top_free_config["include_top_free_context"] = True
+        fetch_calls_with_context = []
+
+        def context_fixture_fetcher(platform, platform_config, chart_type, country, ranking_date, auth_token):
+            fetch_calls_with_context.append((platform, chart_type, country, ranking_date))
+            return fixture_rankings[(platform, chart_type)]
+
+        context_candidates, _ = discovery.build_candidates(
+            top_free_config,
+            ranking_fetcher=context_fixture_fetcher,
+            existing_observations=existing,
+            known_existing_rows=fixture_known_existing_rows(),
+        )
+        assert_equal(
+            len(fetch_calls_with_context),
+            4,
+            "Explicit Top Free context mode should fetch all configured ranking calls",
+        )
+        ios_context = [row for row in context_candidates if row["platform"] == "ios"][0]
+        assert_true(
+            "Top Free iPhone Apps #4" in ios_context["sg_chart_matches"],
+            "Explicit Top Free context mode should preserve Top Free rank evidence",
+        )
 
         second_candidates, second_observations = discovery.build_candidates(
             fixture_config(),

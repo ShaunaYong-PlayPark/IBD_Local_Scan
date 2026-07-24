@@ -187,10 +187,10 @@ Generated static GitHub Pages site. Contains HTML, CSS/JS assets, and report-fac
 
 Weekly candidate capture:
 
-1. Layer 1 fetches the configured SG charts and records SG Top Grossing observations.
+1. Layer 1 fetches the configured SG Top Grossing charts and records SG Top Grossing observations.
 2. An app ID is a new candidate only when it has not previously appeared in `data/candidates/sg_chart_observations.csv`.
 3. Worldwide release tags and Sensor Tower release dates are not discovery gates.
-4. Top Free ranks remain contextual evidence and do not create candidates.
+4. Top Free ranks are optional context, disabled by default, and do not create candidates.
 5. `scripts/weekly_candidate_capture.py` enriches and stores new candidates in the weekly candidate store.
 6. The no-API mode `--from-existing-outputs` can update the store from existing local outputs.
 
@@ -304,6 +304,8 @@ scripts/layer1_sg_rankings_only_candidates.py
 ```
 
 SG ranking-first discovery. Preserves the legacy Layer 1 output columns, leaves `released_tag_matches` blank, and uses the local SG chart observation ledger as the sole seen-ID history.
+
+Routine Layer 1 discovery fetches only iOS and Android SG Games Top Grossing, for two Sensor Tower ranking calls total. Top Free context can be enabled explicitly with `include_top_free_context`, but it is disabled by default.
 
 Its explicit `--baseline-only` mode seeds an empty ledger without producing candidates. The baseline is a separately approved operator action and is not an automated workflow mode.
 

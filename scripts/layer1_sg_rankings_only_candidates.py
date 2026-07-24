@@ -236,6 +236,14 @@ def baseline_top_grossing_chart(platform, platform_config):
     return matches[0]
 
 
+def discovery_chart_items(platform_config, include_top_free_context=False):
+    return [
+        (chart_type, chart_label)
+        for chart_type, chart_label in platform_config.get("charts", {}).items()
+        if include_top_free_context or "gross" in chart_type.lower()
+    ]
+
+
 def run_baseline_only(
     config,
     ranking_fetcher=None,
@@ -335,11 +343,13 @@ def build_candidates(
     current_observations = []
     candidates_by_key = {}
     run_timestamp = datetime.now(timezone.utc).isoformat()
+    include_top_free_context = bool(config.get("include_top_free_context", False))
 
     for platform, platform_config in config["platforms"].items():
         print(f"Fetching SG rankings for {platform}...")
         chart_positions = {}
-        for chart_type, chart_label in platform_config["charts"].items():
+        chart_items = discovery_chart_items(platform_config, include_top_free_context)
+        for chart_type, chart_label in chart_items:
             chart_positions[chart_type] = ranking_fetcher(
                 platform, platform_config, chart_type, country, ranking_date, auth_token
             )
@@ -347,7 +357,7 @@ def build_candidates(
 
         top_grossing_chart_types = [
             chart_type
-            for chart_type in platform_config["charts"]
+            for chart_type, _ in chart_items
             if "gross" in chart_type.lower()
         ]
         top_grossing_ids = set()
@@ -372,7 +382,7 @@ def build_candidates(
         # Discovery rule:
         #   First appearance in the local SG Top Grossing observation history.
         # Sensor Tower release dates and worldwide release tags are not gates.
-        # Top Free is still fetched and recorded later, but it does not create candidates.
+        # Top Free can be fetched as optional context, but it does not create candidates.
         known_platform_ids = {
             app_id
             for known_platform, app_id in known_platform_app_ids
