@@ -233,6 +233,32 @@ original_title,unified_id,detected_language_code,english_display_title
 
 Unknown non-Latin titles are preserved unchanged and flagged for review. The dashboard does not rough-translate unmapped titles.
 
+## Known Existing Games
+
+The committed historical known-existing game database is:
+
+```text
+data/reference/known_existing_games.csv
+```
+
+Raw historical top-games exports are local input only:
+
+```text
+data/reference/historical_top_games_raw/
+```
+
+The raw files are ignored by Git and should not be committed. They are tab-delimited Sensor Tower exports even though they use a `.csv` extension.
+
+Rebuild the generated database with:
+
+```powershell
+python scripts/build_known_existing_games.py
+```
+
+The output keeps only `platform`, `app_id`, `unified_app_id`, `unified_name`, `app_name`, `first_known_date`, `last_known_date`, and `source_file_count`. It is used to identify games already present in historical top-chart exports.
+
+Ranking-first discovery uses this database to reduce false positives. Layer 1 excludes exact historical `platform` + `app_id` matches before unified lookup while still recording SG chart observations. Layer 2 also drops rows whose resolved `unified_app_id` is historically known. If the database is missing, empty, or malformed, live discovery fails closed.
+
 ## Deployment Notes
 
 For GitHub Pages:

@@ -2,7 +2,9 @@ import csv
 import urllib.request
 from datetime import date
 
+import candidate_store
 import layer1_sg_rankings_only_candidates as discovery
+import layer2_enrich_unified_apps as layer2
 from test_temp_utils import repo_temp_dir
 
 
@@ -53,11 +55,37 @@ def fixture_config():
     }
 
 
+def fixture_known_existing_rows():
+    return [
+        {
+            "platform": "ios",
+            "app_id": "ios-known",
+            "unified_app_id": "known-unified-ios",
+            "unified_name": "Known iOS Game",
+            "app_name": "Known iOS Game",
+            "first_known_date": "2019-01-01",
+            "last_known_date": "2026-01-01",
+            "source_file_count": "3",
+        },
+        {
+            "platform": "android",
+            "app_id": "android-historical",
+            "unified_app_id": "known-cross-platform-unified",
+            "unified_name": "Known Cross Platform Game",
+            "app_name": "Known Cross Platform Game",
+            "first_known_date": "2020-01-01",
+            "last_known_date": "2025-01-01",
+            "source_file_count": "2",
+        },
+    ]
+
+
 def main():
     network_attempts = []
     original_urlopen = urllib.request.urlopen
     original_request_json = discovery.request_json
     original_save_raw = discovery.save_raw
+    original_discovery_known_reader = discovery.read_known_existing_games
 
     def block_urlopen(*args, **kwargs):
         network_attempts.append(("urlopen", args, kwargs))
@@ -68,8 +96,8 @@ def main():
         raise AssertionError("Sensor Tower request attempted during offline test.")
 
     fixture_rankings = {
-        ("ios", "topfreeapplications"): {"ios-new": 4, "ios-seen": 8},
-        ("ios", "topgrossingapplications"): {"ios-seen": 10, "ios-new": 20},
+        ("ios", "topfreeapplications"): {"ios-new": 4, "ios-seen": 8, "ios-known": 12},
+        ("ios", "topgrossingapplications"): {"ios-seen": 10, "ios-known": 15, "ios-new": 20},
         ("android", "topselling_free"): {"android-new": 6},
         ("android", "topgrossing"): {"android-new": 30},
     }
@@ -99,12 +127,21 @@ def main():
             fixture_config(),
             ranking_fetcher=fixture_fetcher,
             existing_observations=existing,
+            known_existing_rows=fixture_known_existing_rows(),
         )
 
         assert_equal(
             {(row["platform"], row["app_id"]) for row in candidates},
             {("ios", "ios-new"), ("android", "android-new")},
             "Only SG Top Grossing app IDs absent from history should be candidates",
+        )
+        assert_true(
+            ("ios", "ios-known") not in {(row["platform"], row["app_id"]) for row in candidates},
+            "Known platform app IDs must be excluded before Layer 2",
+        )
+        assert_true(
+            ("ios", "ios-known") in {(row["platform"], row["app_id"]) for row in observations},
+            "Known platform app IDs must still be recorded in SG chart observations",
         )
         assert_true(
             all(row["released_tag_matches"] == "" for row in candidates),
@@ -124,6 +161,7 @@ def main():
             fixture_config(),
             ranking_fetcher=fixture_fetcher,
             existing_observations=observations,
+            known_existing_rows=fixture_known_existing_rows(),
         )
         assert_equal(second_candidates, [], "A repeated observation must not rediscover candidates")
         assert_equal(
@@ -143,6 +181,38 @@ def main():
                 set(discovery.OBSERVATION_FIELDS),
                 "Ledger should use the documented single-file schema",
             )
+
+        layer2_candidate = {
+            "run_timestamp_utc": "2026-07-22T00:00:00+00:00",
+            "ranking_date": "2026-07-22",
+            "country": "SG",
+            "platform": "ios",
+            "app_id": "ios-cross-platform-new",
+            "released_tag_matches": "",
+            "sg_chart_matches": "Top Grossing iPhone Apps #9",
+            "best_sg_rank": "9",
+            "candidate_reason": discovery.DISCOVERY_SOURCE,
+            "chart_match_details_json": "[]",
+        }
+        lookup = {
+            ("ios", "ios-cross-platform-new"): {
+                "unified_app_id": "known-cross-platform-unified",
+                "name": "Known Cross Platform Game",
+                "canonical_app_id": "ios-cross-platform-new",
+                "itunes_apps": [{"app_id": "ios-cross-platform-new"}],
+                "android_apps": [{"app_id": "android-historical"}],
+            }
+        }
+        enriched = layer2.enrich_rows([layer2_candidate], lookup)
+        filtered = layer2.filter_known_existing_unified_rows(
+            enriched,
+            known_existing_rows=fixture_known_existing_rows(),
+        )
+        assert_equal(
+            filtered,
+            [],
+            "Layer 2 must drop candidates whose unified_app_id is historically known",
+        )
 
         with repo_temp_dir("ibd_missing_ledger_test_") as tmp:
             original_ledger = discovery.OBSERVATION_LEDGER_CSV
@@ -188,6 +258,48 @@ def main():
                 "Empty-ledger refusal must happen before any ranking fetch",
             )
 
+        def raise_missing_known_db():
+            raise RuntimeError("Known-existing games database does not exist: test")
+
+        discovery.read_known_existing_games = raise_missing_known_db
+        calls_before_refusal = len(fetch_calls)
+        try:
+            assert_raises(
+                "Known-existing games database does not exist",
+                lambda: discovery.build_candidates(
+                    fixture_config(),
+                    ranking_fetcher=fixture_fetcher,
+                    existing_observations=existing,
+                ),
+                "Normal discovery must refuse a missing known-existing database",
+            )
+        finally:
+            discovery.read_known_existing_games = original_discovery_known_reader
+        assert_equal(
+            len(fetch_calls),
+            calls_before_refusal,
+            "Missing known-existing database refusal must happen before any ranking fetch",
+        )
+
+        with repo_temp_dir("ibd_known_db_validation_test_") as tmp:
+            empty_known = tmp / "empty_known_existing_games.csv"
+            malformed_known = tmp / "malformed_known_existing_games.csv"
+            empty_known.write_text(
+                ",".join(candidate_store.KNOWN_EXISTING_FIELDS) + "\n",
+                encoding="utf-8",
+            )
+            malformed_known.write_text("platform,app_id\nios,123\n", encoding="utf-8")
+            assert_raises(
+                "no usable rows",
+                lambda: candidate_store.read_known_existing_games(empty_known),
+                "Known-existing database must fail closed when empty",
+            )
+            assert_raises(
+                "malformed",
+                lambda: candidate_store.read_known_existing_games(malformed_known),
+                "Known-existing database must fail closed when malformed",
+            )
+
         baseline_fetch_calls = []
 
         def baseline_fixture_fetcher(
@@ -216,6 +328,7 @@ def main():
                 {(row["platform"], row["app_id"]) for row in baseline_rows},
                 {
                     ("ios", "ios-seen"),
+                    ("ios", "ios-known"),
                     ("ios", "ios-new"),
                     ("android", "android-new"),
                 },
@@ -230,7 +343,7 @@ def main():
                 "Baseline must fetch only iOS and Android SG Top Grossing",
             )
             persisted = discovery.read_baseline_ledger(ledger_path)
-            assert_equal(len(persisted), 3, "Baseline observations should be persisted")
+            assert_equal(len(persisted), 4, "Baseline observations should be persisted")
 
             calls_before_refusal = len(baseline_fetch_calls)
             assert_raises(
@@ -366,6 +479,7 @@ def main():
         urllib.request.urlopen = original_urlopen
         discovery.request_json = original_request_json
         discovery.save_raw = original_save_raw
+        discovery.read_known_existing_games = original_discovery_known_reader
 
     print("RANKING_FIRST_DISCOVERY_OFFLINE_PASS")
     print("NETWORK_CALLS=0")

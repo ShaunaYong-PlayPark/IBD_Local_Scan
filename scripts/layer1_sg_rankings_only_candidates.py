@@ -11,6 +11,8 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from candidate_store import known_existing_platform_app_ids, read_known_existing_games
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "settings.json"
@@ -306,7 +308,12 @@ def run_baseline_only(
     return [], observations, ledger_path
 
 
-def build_candidates(config, ranking_fetcher=None, existing_observations=None):
+def build_candidates(
+    config,
+    ranking_fetcher=None,
+    existing_observations=None,
+    known_existing_rows=None,
+):
     ranking_fetcher = ranking_fetcher or fetch_ranking_ids
     auth_token = config["auth_token"]
     country = config["country"]
@@ -319,6 +326,12 @@ def build_candidates(config, ranking_fetcher=None, existing_observations=None):
         else read_required_discovery_ledger(OBSERVATION_LEDGER_CSV)
     )
     seen_before = seen_app_ids(prior_observations, country)
+    known_existing_rows = (
+        list(known_existing_rows)
+        if known_existing_rows is not None
+        else read_known_existing_games()
+    )
+    known_platform_app_ids = known_existing_platform_app_ids(known_existing_rows)
     current_observations = []
     candidates_by_key = {}
     run_timestamp = datetime.now(timezone.utc).isoformat()
@@ -360,7 +373,16 @@ def build_candidates(config, ranking_fetcher=None, existing_observations=None):
         #   First appearance in the local SG Top Grossing observation history.
         # Sensor Tower release dates and worldwide release tags are not gates.
         # Top Free is still fetched and recorded later, but it does not create candidates.
-        discovered_ids = top_grossing_ids - seen_before.get(platform, set())
+        known_platform_ids = {
+            app_id
+            for known_platform, app_id in known_platform_app_ids
+            if known_platform == platform
+        }
+        discovered_ids = (
+            top_grossing_ids
+            - seen_before.get(platform, set())
+            - known_platform_ids
+        )
         print(
             f"{platform}: {len(discovered_ids)} app IDs first seen in local "
             "SG Top Grossing history."

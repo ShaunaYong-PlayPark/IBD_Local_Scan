@@ -9,6 +9,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from candidate_store import known_existing_unified_ids, read_known_existing_games
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "settings.json"
@@ -160,6 +162,20 @@ def enrich_rows(layer1_rows, lookup):
     return enriched
 
 
+def filter_known_existing_unified_rows(rows, known_existing_rows=None):
+    known_existing_rows = (
+        list(known_existing_rows)
+        if known_existing_rows is not None
+        else read_known_existing_games()
+    )
+    known_unified_ids = known_existing_unified_ids(known_existing_rows)
+    return [
+        row
+        for row in rows
+        if not row.get("unified_app_id") or row.get("unified_app_id") not in known_unified_ids
+    ]
+
+
 def write_outputs(rows):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     csv_path = OUTPUT_DIR / "layer2_unified_candidates.csv"
@@ -204,8 +220,12 @@ def write_outputs(rows):
 def main():
     config = load_config()
     layer1_rows = read_layer1_candidates()
+    known_existing_rows = read_known_existing_games()
     lookup = build_unified_lookup(config, layer1_rows)
-    enriched = enrich_rows(layer1_rows, lookup)
+    enriched = filter_known_existing_unified_rows(
+        enrich_rows(layer1_rows, lookup),
+        known_existing_rows=known_existing_rows,
+    )
     csv_path, json_path = write_outputs(enriched)
 
     matched_count = sum(1 for row in enriched if row["unified_lookup_status"] == "matched")

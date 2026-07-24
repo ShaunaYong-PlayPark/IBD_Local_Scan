@@ -10,6 +10,7 @@ OUTPUT_DIR = ROOT / "data" / "output"
 CANDIDATE_DIR = ROOT / "data" / "candidates"
 SNAPSHOT_DIR = CANDIDATE_DIR / "snapshots"
 CANDIDATE_STORE_CSV = CANDIDATE_DIR / "weekly_candidate_store.csv"
+KNOWN_EXISTING_GAMES_CSV = ROOT / "data" / "reference" / "known_existing_games.csv"
 REPORT_PERIOD_METADATA_CSV = OUTPUT_DIR / "report_period_candidate_metadata.csv"
 REPORT_PERIOD_METADATA_JSON = OUTPUT_DIR / "report_period_candidate_metadata.json"
 REPORT_PERIOD_LAYER2_CSV = OUTPUT_DIR / "report_period_layer2_candidates.csv"
@@ -18,6 +19,16 @@ LAYER2_CSV = OUTPUT_DIR / "layer2_unified_candidates.csv"
 LAYER3_CSV = OUTPUT_DIR / "layer3_unique_game_metadata.csv"
 LAYER3_5_CSV = OUTPUT_DIR / "layer3_5_title_normalised_metadata.csv"
 RANKING_FIRST_SOURCE = "SG Top Grossing first seen"
+KNOWN_EXISTING_FIELDS = [
+    "platform",
+    "app_id",
+    "unified_app_id",
+    "unified_name",
+    "app_name",
+    "first_known_date",
+    "last_known_date",
+    "source_file_count",
+]
 
 
 STORE_FIELDS = [
@@ -89,6 +100,47 @@ def read_csv(path):
         return []
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+def read_known_existing_games(path=None):
+    path = path or KNOWN_EXISTING_GAMES_CSV
+    if not path.exists():
+        raise RuntimeError(f"Known-existing games database does not exist: {path}")
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = list(reader.fieldnames or [])
+        missing = [field for field in KNOWN_EXISTING_FIELDS if field not in fieldnames]
+        if missing:
+            raise RuntimeError(
+                "Known-existing games database is malformed; missing columns: "
+                + ", ".join(missing)
+            )
+        rows = [
+            row
+            for row in reader
+            if row.get("platform") and row.get("app_id") and row.get("unified_app_id")
+        ]
+    if not rows:
+        raise RuntimeError("Known-existing games database has no usable rows.")
+    return rows
+
+
+def known_existing_platform_app_ids(rows=None):
+    rows = rows if rows is not None else read_known_existing_games()
+    return {
+        (row.get("platform", "").strip(), row.get("app_id", "").strip())
+        for row in rows
+        if row.get("platform") and row.get("app_id")
+    }
+
+
+def known_existing_unified_ids(rows=None):
+    rows = rows if rows is not None else read_known_existing_games()
+    return {
+        row.get("unified_app_id", "").strip()
+        for row in rows
+        if row.get("unified_app_id")
+    }
 
 
 def write_csv(path, rows, fields):

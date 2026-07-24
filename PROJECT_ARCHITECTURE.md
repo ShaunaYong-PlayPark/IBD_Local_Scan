@@ -344,6 +344,20 @@ data/reference/master_title_mapping.csv
 Local title mapping file.
 
 ```text
+data/reference/historical_top_games_raw/
+```
+
+Local-only raw Sensor Tower historical top-games CSV exports. These files are tab-delimited despite the `.csv` extension and are ignored by Git.
+
+```text
+data/reference/known_existing_games.csv
+```
+
+Committed generated database of games already seen in historical top charts. Rebuild with `python scripts/build_known_existing_games.py`. The slim schema is `platform`, `app_id`, `unified_app_id`, `unified_name`, `app_name`, `first_known_date`, `last_known_date`, and `source_file_count`.
+
+Ranking-first discovery uses this file as a known-existing exclusion database. Layer 1 removes exact `platform` + `app_id` matches before Layer 2 API work, but still writes SG chart observations. Layer 2 defensively removes rows whose resolved `unified_app_id` appears in the database. Missing, empty, or malformed known-existing data fails closed.
+
+```text
 data/candidates/sg_chart_observations.csv
 ```
 

@@ -27,6 +27,7 @@ data/raw/
 data/cache/
 data/output/
 data/title_canonicalizer/
+data/reference/historical_top_games_raw/
 data/candidates/snapshots/
 data/local_app/*.log
 data/local_app/*.err
