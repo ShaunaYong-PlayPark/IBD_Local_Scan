@@ -1,0 +1,213 @@
+import argparse
+import csv
+from pathlib import Path
+
+import build_pc_steamdb_discovery_candidates as pc
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MEETING_PACK_OUTPUT_ROOT = ROOT / "data" / "output" / "meeting_pack"
+MEETING_DROP_ROOT = ROOT / "data" / "input" / "meeting_drop"
+
+UNKNOWN = "unconfirmed"
+
+ENRICHMENT_FIELDS = [
+    "report_name",
+    "report_classification",
+    "mobile_source_period",
+    "pc_source_period",
+    "release_date_used",
+    "release_date_scope",
+    "release_date_source_url",
+    "official_site_url",
+    "store_url",
+    "developer",
+    "publisher",
+    "platforms_confirmed",
+    "mobile_pc_relationship",
+    "summary_sentence_1",
+    "summary_sentence_2",
+    "source_urls",
+    "enrichment_status",
+    "enrichment_notes",
+]
+
+RESEARCH_OVERLAY_FIELDS = [
+    "report_name",
+    "release_date_used",
+    "release_date_scope",
+    "release_date_source_url",
+    "official_site_url",
+    "store_url",
+    "developer",
+    "publisher",
+    "platforms_confirmed",
+    "mobile_pc_relationship",
+    "summary_sentence_1",
+    "summary_sentence_2",
+    "source_urls",
+    "enrichment_status",
+    "enrichment_notes",
+]
+
+SEARCH_ORDER_NOTE = [
+    "unified_name",
+    "original_title",
+    "english_report_name",
+    "unified_name + publisher",
+    "english_report_name + publisher",
+]
+
+
+def read_csv(path):
+    with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def write_csv(path, rows, fields=ENRICHMENT_FIELDS):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with Path(path).open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def game_report_layer_path(meeting_date):
+    return MEETING_PACK_OUTPUT_ROOT / meeting_date / "game_report_layer.csv"
+
+
+def output_path(meeting_date):
+    return MEETING_PACK_OUTPUT_ROOT / meeting_date / "game_enriched_layer.csv"
+
+
+def default_research_overlay_path(meeting_date):
+    return MEETING_DROP_ROOT / meeting_date / "game_enrichment_research.csv"
+
+
+def normalize_date(value):
+    parsed = pc.parse_date(value)
+    return parsed.isoformat() if parsed else str(value or "").strip()
+
+
+def report_name(row):
+    return (
+        row.get("english_report_name")
+        or row.get("unified_name")
+        or row.get("pc_title")
+        or UNKNOWN
+    )
+
+
+def release_fields(row):
+    classification = row.get("report_classification", "")
+    sg_date = normalize_date(row.get("sg_release_date_reference"))
+    if classification in {"mobile_led_cross_platform", "mobile_only"} and sg_date:
+        return sg_date, "Singapore", UNKNOWN
+
+    pc_date = normalize_date(row.get("pc_release_date"))
+    if classification == "pc_only" and pc_date:
+        return pc_date, "Steam", row.get("steam_url") or UNKNOWN
+
+    return UNKNOWN, UNKNOWN, UNKNOWN
+
+
+def relationship(classification):
+    if classification == "mobile_led_cross_platform":
+        return "mobile-led; PC stats secondary"
+    if classification == "mobile_only":
+        return "mobile only in report layer"
+    if classification == "pc_only":
+        return "PC-only report-facing game"
+    return UNKNOWN
+
+
+def platforms(row):
+    classification = row.get("report_classification", "")
+    if classification == "mobile_led_cross_platform":
+        return "mobile, PC"
+    if classification == "mobile_only":
+        return "mobile"
+    if classification == "pc_only":
+        return "PC"
+    return UNKNOWN
+
+
+def base_enrichment_row(row):
+    name = report_name(row)
+    classification = row.get("report_classification", UNKNOWN) or UNKNOWN
+    release_date, release_scope, release_source_url = release_fields(row)
+    store_url = row.get("steam_url") if row.get("steam_url") else UNKNOWN
+    source_urls = store_url if store_url != UNKNOWN else UNKNOWN
+    return {
+        "report_name": name,
+        "report_classification": classification,
+        "mobile_source_period": row.get("mobile_source_period") or UNKNOWN,
+        "pc_source_period": row.get("pc_source_period") or UNKNOWN,
+        "release_date_used": release_date or UNKNOWN,
+        "release_date_scope": release_scope or UNKNOWN,
+        "release_date_source_url": release_source_url or UNKNOWN,
+        "official_site_url": UNKNOWN,
+        "store_url": store_url,
+        "developer": UNKNOWN,
+        "publisher": row.get("unified_publisher_name") or UNKNOWN,
+        "platforms_confirmed": platforms(row),
+        "mobile_pc_relationship": relationship(classification),
+        "summary_sentence_1": UNKNOWN,
+        "summary_sentence_2": UNKNOWN,
+        "source_urls": source_urls,
+        "enrichment_status": "needs_research",
+        "enrichment_notes": "Base row generated from game_report_layer.csv; unknown internet research fields left unconfirmed.",
+    }
+
+
+def read_research_overlay(path):
+    path = Path(path)
+    if not path.exists():
+        return {}
+    rows = read_csv(path)
+    overlay = {}
+    for row in rows:
+        key = pc.normalize_title(row.get("report_name"))
+        if key:
+            overlay[key] = row
+    return overlay
+
+
+def apply_overlay(row, overlay):
+    values = overlay.get(pc.normalize_title(row.get("report_name")), {})
+    if not values:
+        return row
+    updated = dict(row)
+    for field in RESEARCH_OVERLAY_FIELDS:
+        value = str(values.get(field, "")).strip()
+        if field != "report_name" and value:
+            updated[field] = value
+    if updated["enrichment_status"] == "needs_research":
+        updated["enrichment_status"] = "research_overlay_applied"
+    return updated
+
+
+def build(meeting_date, research_overlay_path=None):
+    game_rows = read_csv(game_report_layer_path(meeting_date))
+    overlay_path = research_overlay_path or default_research_overlay_path(meeting_date)
+    overlay = read_research_overlay(overlay_path)
+    rows = [apply_overlay(base_enrichment_row(row), overlay) for row in game_rows]
+    out = output_path(meeting_date)
+    write_csv(out, rows)
+    return out, rows
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Build report-facing game enrichment layer.")
+    parser.add_argument("--meeting-date", required=True)
+    parser.add_argument("--research-overlay")
+    args = parser.parse_args()
+
+    path, rows = build(args.meeting_date, args.research_overlay)
+    print(f"Meeting date: {args.meeting_date}")
+    print(f"Game enriched layer rows: {len(rows)}")
+    print(f"Output path: {path}")
+
+
+if __name__ == "__main__":
+    main()

@@ -205,6 +205,24 @@ Current report build from existing local files:
 python scripts/current_report_watchlist_workflow.py
 ```
 
+Game news context layer from the Game News Radar:
+
+```powershell
+python scripts/build_game_news_context_layer.py --meeting-date 2026-07-28
+```
+
+This builds:
+
+```text
+data/output/meeting_pack/<meeting-date>/news_context_layer.csv
+```
+
+Current rule: Game News Radar `Game Releases` only support games already selected
+by Sensor Tower or SteamDB in `game_report_layer.csv`. They do not add new games
+to the main report by themselves. `Game Announcements` enter only when they are
+high-score and posted inside the report period. Use `--use-public-radar` to read
+the live `game-data` branch instead of the sibling local radar project.
+
 ## Live API Scripts
 
 These scripts require `SENSORTOWER_AUTH_TOKEN`:

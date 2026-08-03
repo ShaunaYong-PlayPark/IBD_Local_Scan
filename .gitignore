@@ -23,6 +23,10 @@ qa_screenshots/
 ~$*
 
 # Generated/raw workflow data
+data/input/*.csv
+data/input/meeting_drop/
+data/input/sensor_tower_exports/
+data/input/sensor_tower_top_charts/
 data/raw/
 data/cache/
 data/output/
