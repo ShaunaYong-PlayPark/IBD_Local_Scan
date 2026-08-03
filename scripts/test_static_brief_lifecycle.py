@@ -35,6 +35,31 @@ FIELDS = [
     "sensor_tower_effective_end_date",
 ]
 
+NEWS_CONTEXT_FIELDS = [
+    "meeting_date",
+    "report_start_date",
+    "report_end_date",
+    "context_type",
+    "radar_section",
+    "matched_report_game",
+    "match_method",
+    "event_date",
+    "hot_score",
+    "hot_reasons",
+    "source",
+    "source_tier",
+    "source_tier_label",
+    "region",
+    "title",
+    "title_en",
+    "url",
+    "published_at",
+    "first_seen_at",
+    "last_seen_at",
+    "radar_generated_at",
+    "inclusion_reason",
+]
+
 
 def row(title, period_start, period_end, revenue="1000"):
     return {
@@ -76,6 +101,64 @@ def write_csv(path, rows):
         writer.writerows(rows)
 
 
+def write_news_context_csv(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {
+            "meeting_date": "2026-07-14",
+            "report_start_date": "2026-06-23",
+            "report_end_date": "2026-07-13",
+            "context_type": "high_score_game_announcement",
+            "radar_section": "game_announcements",
+            "matched_report_game": "",
+            "match_method": "",
+            "event_date": "2026-07-10",
+            "hot_score": "88",
+            "hot_reasons": "game_lifecycle",
+            "source": "PC Gamer",
+            "source_tier": "major_gaming_media",
+            "source_tier_label": "Major gaming media",
+            "region": "Global",
+            "title": "Future RPG release date announced",
+            "title_en": "Future RPG release date announced",
+            "url": "https://example.com/future-rpg",
+            "published_at": "2026-07-10",
+            "first_seen_at": "2026-07-10T00:00:00Z",
+            "last_seen_at": "2026-07-10T00:00:00Z",
+            "radar_generated_at": "2026-07-14T00:00:00Z",
+            "inclusion_reason": "Game Announcement hot_score >= 70 and inside report period.",
+        },
+        {
+            "meeting_date": "2026-07-14",
+            "report_start_date": "2026-06-23",
+            "report_end_date": "2026-07-13",
+            "context_type": "selected_game_release_news",
+            "radar_section": "game_releases",
+            "matched_report_game": "Star Sailors",
+            "match_method": "selected_game_name_in_article_title",
+            "event_date": "2026-07-11",
+            "hot_score": "73",
+            "hot_reasons": "game_lifecycle",
+            "source": "Gematsu",
+            "source_tier": "major_gaming_media",
+            "source_tier_label": "Major gaming media",
+            "region": "Global",
+            "title": "Star Sailors launches worldwide",
+            "title_en": "Star Sailors launches worldwide",
+            "url": "https://example.com/star-sailors",
+            "published_at": "2026-07-11",
+            "first_seen_at": "2026-07-11T00:00:00Z",
+            "last_seen_at": "2026-07-11T00:00:00Z",
+            "radar_generated_at": "2026-07-14T00:00:00Z",
+            "inclusion_reason": "Game Release article matched to Sensor Tower/SteamDB selected game.",
+        },
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=NEWS_CONTEXT_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def assert_true(condition, message):
     if not condition:
         raise AssertionError(message)
@@ -94,6 +177,7 @@ def main():
         "metadata": exporter.METADATA,
         "weekly_summary": exporter.WEEKLY_SUMMARY,
         "schedule": exporter.SCHEDULE,
+        "meeting_pack_output_root": exporter.MEETING_PACK_OUTPUT_ROOT,
     }
 
     with repo_temp_dir("ibd_static_lifecycle_test_") as tmp_path:
@@ -114,6 +198,7 @@ def main():
         exporter.METADATA = local_app / "extraction_metadata.json"
         exporter.WEEKLY_SUMMARY = output / "weekly_candidate_capture_summary.json"
         exporter.SCHEDULE = config / "static_report_schedule.json"
+        exporter.MEETING_PACK_OUTPUT_ROOT = output / "meeting_pack"
 
         write_csv(
             exporter.LATEST_FINALIZED_CSV,
@@ -158,6 +243,7 @@ def main():
             ),
             encoding="utf-8",
         )
+        write_news_context_csv(exporter.MEETING_PACK_OUTPUT_ROOT / "2026-07-14" / "news_context_layer.csv")
 
         exporter.main()
 
@@ -170,6 +256,9 @@ def main():
         assert_true("23 Jun 2026 to 13 Jul 2026" in latest_html, "Latest brief should show finalized July period.")
         assert_true("CookieRun Classic" in latest_html, "Latest brief should include CookieRun Classic.")
         assert_true("Star Sailors" in latest_html, "Latest brief should preserve Star Sailors.")
+        assert_true("Game News Context" in latest_html, "Latest brief should include the news context section.")
+        assert_true("Future RPG release date announced" in latest_html, "Latest brief should show high-score announcements.")
+        assert_true("Star Sailors launches worldwide" in latest_html, "Latest brief should show release-support news.")
         assert_true("Staging Game" not in latest_html, "Weekly staging output must not replace Latest Brief.")
         assert_true("Current brief" not in archive_html, "Archive must not label staging as Current brief.")
         assert_true("No older finalized briefs yet." in archive_html, "Archive should show empty state without older briefs.")
@@ -178,6 +267,11 @@ def main():
             "Staging empty state should appear outside the Latest Brief.",
         )
         assert_true(titles == {"Star Sailors", "CookieRun Classic"}, "Final JSON should contain only finalized brief rows.")
+        assert_true(len(payload["news_context"]) == 2, "Final JSON should include news context rows.")
+        assert_true(
+            {item["context_type"] for item in payload["news_context"]} == {"high_score_game_announcement", "selected_game_release_news"},
+            "Final JSON should preserve news context types.",
+        )
         assert_true(staging["mode"] == "weekly-capture", "Weekly staging summary should keep mode.")
         assert_true(staging["candidate_count"] == 0, "Weekly staging summary should keep candidate count.")
         assert_true(staging["sensor_tower_ranking_date"] == "2026-07-19", "Weekly staging summary should keep ranking date.")
@@ -193,6 +287,7 @@ def main():
     exporter.METADATA = originals["metadata"]
     exporter.WEEKLY_SUMMARY = originals["weekly_summary"]
     exporter.SCHEDULE = originals["schedule"]
+    exporter.MEETING_PACK_OUTPUT_ROOT = originals["meeting_pack_output_root"]
     print("STATIC_BRIEF_LIFECYCLE_PASS")
 
 

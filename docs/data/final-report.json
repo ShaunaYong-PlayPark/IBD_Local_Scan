@@ -83,5 +83,6 @@
     },
     "notes": "Committed static-site schedule settings. Update this file by pull request/commit before running the static export."
   },
-  "staging": {}
+  "staging": {},
+  "news_context": []
 }

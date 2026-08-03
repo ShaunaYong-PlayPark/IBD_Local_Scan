@@ -23,6 +23,8 @@ DOCS_FINAL_JSON = DATA / "final-report.json"
 DOCS_WEEKLY_STAGING_JSON = DATA / "weekly-staging-summary.json"
 METADATA = LOCAL_APP / "extraction_metadata.json"
 WEEKLY_SUMMARY = OUT / "weekly_candidate_capture_summary.json"
+MEETING_PACK_OUTPUT_ROOT = OUT / "meeting_pack"
+NEWS_CONTEXT_FILENAME = "news_context_layer.csv"
 
 
 NAV_ITEMS = [
@@ -236,6 +238,22 @@ def meeting_date_for(rows, schedule):
         if end:
             return display_date((end + timedelta(days=1)).isoformat())
     return display_date(schedule.get("upcoming_meeting_date", ""))
+
+
+def meeting_date_key(rows, schedule):
+    if rows:
+        end = parse_date(rows[0].get("report_end_date", ""))
+        if end:
+            return (end + timedelta(days=1)).isoformat()
+    meeting = parse_date(schedule.get("upcoming_meeting_date", ""))
+    return meeting.isoformat() if meeting else ""
+
+
+def source_news_context(rows, schedule):
+    meeting_date = meeting_date_key(rows, schedule)
+    if not meeting_date:
+        return []
+    return read_csv(MEETING_PACK_OUTPUT_ROOT / meeting_date / NEWS_CONTEXT_FILENAME)
 
 
 def in_progress_period(schedule):
@@ -533,7 +551,48 @@ def released_games_section(strong, emerging, view):
 </section>"""
 
 
-def latest_page(rows, schedule, metadata, view="cards"):
+def news_context_card(row, label):
+    title = row.get("title_en") or row.get("title") or "Untitled news item"
+    source = row.get("source") or "Unknown source"
+    score = row.get("hot_score") or "0"
+    event_date = display_date(row.get("event_date")) or display_date(row.get("published_at")) or "Date unavailable"
+    matched = row.get("matched_report_game")
+    reason = row.get("inclusion_reason") or "Qualified through Game News Radar context rules."
+    url = row.get("url") or "#"
+    matched_html = f'<p><b>Matched game:</b> {escape(matched)}</p>' if matched else ""
+    link_html = f'<a href="{escape(url)}" target="_blank" rel="noopener">View source</a>' if url != "#" else ""
+    return f"""<article class="news-context-card">
+  <div class="meta-chip-row"><span class="metric-badge neutral">{escape(label)}</span><span class="metric-badge strong">Score {escape(str(score))}</span><span class="metric-badge neutral">{escape(event_date)}</span></div>
+  <h3>{escape(title)}</h3>
+  <p><b>Source:</b> {escape(source)}</p>
+  {matched_html}
+  <p>{escape(reason)}</p>
+  {link_html}
+</article>"""
+
+
+def news_context_section(news_context):
+    release_rows = [r for r in news_context if r.get("context_type") == "selected_game_release_news"]
+    announcement_rows = [r for r in news_context if r.get("context_type") == "high_score_game_announcement"]
+    release_cards = "".join(news_context_card(row, "Release support") for row in release_rows) or empty_state(
+        "No release-support news matched selected games",
+        "Game Release radar items only appear here when they match a Sensor Tower or SteamDB selected game.",
+    )
+    announcement_cards = "".join(news_context_card(row, "High-score announcement") for row in announcement_rows) or empty_state(
+        "No high-score announcements for this report period",
+        "Game Announcements only appear here when the radar score is high and the event date is inside the report period.",
+    )
+    return f"""<section class="brief-section news-context-section">
+  <div class="section-heading"><div><h2>Game News Context</h2><p>Game News Radar items used as supporting context for the final brief. Releases support selected games only; announcements are ranked news signals for the report period.</p></div></div>
+  <h3 class="signal-heading">Game Announcements <span>High-score future-release or major game news items.</span></h3>
+  <div class="news-context-grid">{announcement_cards}</div>
+  <h3 class="signal-heading">Release Support <span>Release articles matched to games already selected by Sensor Tower or SteamDB.</span></h3>
+  <div class="news-context-grid">{release_cards}</div>
+</section>"""
+
+
+def latest_page(rows, schedule, metadata, view="cards", news_context=None):
+    news_context = news_context or []
     strong = sort_rows([r for r in rows if signal_group(r) == "strong"])
     emerging = sort_rows([r for r in rows if signal_group(r) != "strong"])
     body = (
@@ -545,6 +604,7 @@ def latest_page(rows, schedule, metadata, view="cards"):
         + summary_cards(rows)
         + executive_summary(rows)
         + released_games_section(strong, emerging, view)
+        + news_context_section(news_context)
         + """<details class="methodology"><summary>Methodology and data notes</summary><p>Discovery uses app IDs first observed in SG Games Top Grossing history. Release dates are evidence only and are not discovery gates. Revenue is shown as estimated gross revenue from Sensor Tower where available.</p></details>"""
     )
     return page_shell("Latest Brief", "latest", body, rows, schedule, metadata)
@@ -592,9 +652,16 @@ def same_path(left, right):
         return left.absolute() == right.absolute()
 
 
-def write_data(rows, metadata, schedule, weekly_summary=None):
+def write_data(rows, metadata, schedule, weekly_summary=None, news_context=None):
     DATA.mkdir(parents=True, exist_ok=True)
-    write_text(DATA / "final-report.json", json.dumps({"rows": rows, "metadata": metadata, "schedule": schedule, "staging": weekly_summary or {}}, ensure_ascii=False, indent=2))
+    write_text(
+        DATA / "final-report.json",
+        json.dumps(
+            {"rows": rows, "metadata": metadata, "schedule": schedule, "staging": weekly_summary or {}, "news_context": news_context or []},
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
     write_text(DOCS_WEEKLY_STAGING_JSON, json.dumps(weekly_staging_payload(weekly_summary or {}, schedule), ensure_ascii=False, indent=2))
     source = source_finalized_csv(metadata)
     destination = DATA / "final_sg_market_scan_current_workflow.csv"
@@ -614,6 +681,11 @@ def write_assets():
 .top-nav a[aria-current="false"]{background:transparent}
 .summary-card.snapshot{border-top:4px solid var(--blue-600)}
 .released-games-section .data-table{margin-top:8px}
+.news-context-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px;margin:10px 0 18px}
+.news-context-card{border:1px solid var(--line);background:#FFFFFF;border-radius:14px;padding:16px;display:grid;gap:10px;box-shadow:0 10px 22px rgba(9,30,66,.06)}
+.news-context-card h3{margin:0;color:var(--blue-900);font-size:19px;line-height:1.2;overflow-wrap:anywhere}
+.news-context-card p{margin:0;color:var(--ink-2);line-height:1.45}
+.news-context-card a{font-weight:900;color:var(--blue-600)}
 .tracker-filters label{display:grid;gap:6px;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
 .tracker-filters input,.tracker-filters select{min-width:min(320px,100%)}
 .original-title{font-size:13px;color:var(--ink-2)}
@@ -781,10 +853,11 @@ def main():
     metadata = source_metadata()
     rows = read_csv(source_finalized_csv(metadata))
     schedule = read_json(SCHEDULE, {})
+    news_context = source_news_context(rows, schedule)
     DOCS.mkdir(parents=True, exist_ok=True)
     write_assets()
-    write_data(rows, metadata, schedule, weekly_summary)
-    latest_cards = latest_page(rows, schedule, metadata, "cards")
+    write_data(rows, metadata, schedule, weekly_summary, news_context)
+    latest_cards = latest_page(rows, schedule, metadata, "cards", news_context)
     write_text(DOCS / "index.html", latest_cards)
     write_text(DOCS / "latest-brief.html", latest_cards)
     write_text(DOCS / "historical-briefs.html", historical_page(rows, schedule, metadata, weekly_summary))

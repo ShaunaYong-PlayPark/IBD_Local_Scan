@@ -223,6 +223,10 @@ to the main report by themselves. `Game Announcements` enter only when they are
 high-score and posted inside the report period. Use `--use-public-radar` to read
 the live `game-data` branch instead of the sibling local radar project.
 
+`scripts/export_static_dashboard.py` consumes this CSV for the matching meeting
+date. It writes the rows into `docs/data/final-report.json` as `news_context`
+and renders them in the Latest Brief `Game News Context` section.
+
 ## Live API Scripts
 
 These scripts require `SENSORTOWER_AUTH_TOKEN`:

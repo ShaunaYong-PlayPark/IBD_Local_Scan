@@ -219,6 +219,11 @@ button:disabled,.btn[disabled],button[aria-disabled="true"]{opacity:.55;cursor:n
 .top-nav a[aria-current="false"]{background:transparent}
 .summary-card.snapshot{border-top:4px solid var(--blue-600)}
 .released-games-section .data-table{margin-top:8px}
+.news-context-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px;margin:10px 0 18px}
+.news-context-card{border:1px solid var(--line);background:#FFFFFF;border-radius:14px;padding:16px;display:grid;gap:10px;box-shadow:0 10px 22px rgba(9,30,66,.06)}
+.news-context-card h3{margin:0;color:var(--blue-900);font-size:19px;line-height:1.2;overflow-wrap:anywhere}
+.news-context-card p{margin:0;color:var(--ink-2);line-height:1.45}
+.news-context-card a{font-weight:900;color:var(--blue-600)}
 .tracker-filters label{display:grid;gap:6px;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
 .tracker-filters input,.tracker-filters select{min-width:min(320px,100%)}
 .original-title{font-size:13px;color:var(--ink-2)}
