@@ -24,7 +24,7 @@ DOCS_WEEKLY_STAGING_JSON = DATA / "weekly-staging-summary.json"
 METADATA = LOCAL_APP / "extraction_metadata.json"
 WEEKLY_SUMMARY = OUT / "weekly_candidate_capture_summary.json"
 MEETING_PACK_OUTPUT_ROOT = OUT / "meeting_pack"
-NEWS_CONTEXT_FILENAME = "news_context_layer.csv"
+NEWS_CONTEXT_FILENAME = "news_context_review.csv"
 
 
 NAV_ITEMS = [
@@ -253,7 +253,8 @@ def source_news_context(rows, schedule):
     meeting_date = meeting_date_key(rows, schedule)
     if not meeting_date:
         return []
-    return read_csv(MEETING_PACK_OUTPUT_ROOT / meeting_date / NEWS_CONTEXT_FILENAME)
+    review_rows = read_csv(MEETING_PACK_OUTPUT_ROOT / meeting_date / NEWS_CONTEXT_FILENAME)
+    return [row for row in review_rows if str(row.get("include_in_final_report") or "").strip().lower() == "yes"]
 
 
 def in_progress_period(schedule):

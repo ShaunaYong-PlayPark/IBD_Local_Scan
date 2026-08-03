@@ -58,6 +58,10 @@ NEWS_CONTEXT_FIELDS = [
     "last_seen_at",
     "radar_generated_at",
     "inclusion_reason",
+    "include_in_final_report",
+    "final_report_section",
+    "editor_decision",
+    "editor_note",
 ]
 
 
@@ -154,6 +158,15 @@ def write_news_context_csv(path):
         },
     ]
     with path.open("w", encoding="utf-8", newline="") as handle:
+        for row in rows:
+            row.update(
+                {
+                    "include_in_final_report": "yes",
+                    "final_report_section": "Industry Trends",
+                    "editor_decision": "include",
+                    "editor_note": "Fixture-approved context",
+                }
+            )
         writer = csv.DictWriter(handle, fieldnames=NEWS_CONTEXT_FIELDS)
         writer.writeheader()
         writer.writerows(rows)
@@ -243,7 +256,7 @@ def main():
             ),
             encoding="utf-8",
         )
-        write_news_context_csv(exporter.MEETING_PACK_OUTPUT_ROOT / "2026-07-14" / "news_context_layer.csv")
+        write_news_context_csv(exporter.MEETING_PACK_OUTPUT_ROOT / "2026-07-14" / "news_context_review.csv")
 
         exporter.main()
 

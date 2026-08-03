@@ -217,6 +217,17 @@ This builds:
 data/output/meeting_pack/<meeting-date>/news_context_layer.csv
 ```
 
+Create the manual review copy before exporting the static report:
+
+```powershell
+python scripts/build_game_news_context_review.py --meeting-date 2026-07-28
+```
+
+This copies every radar row to `news_context_review.csv` with blank editor
+fields. Fill `include_in_final_report` with `yes` only for rows approved for
+the final report; the static exporter ignores unreviewed and non-yes rows.
+The original `news_context_layer.csv` remains the raw radar context layer.
+
 Current rule: Game News Radar `Game Releases` only support games already selected
 by Sensor Tower or SteamDB in `game_report_layer.csv`. They do not add new games
 to the main report by themselves. `Game Announcements` enter only when they are
