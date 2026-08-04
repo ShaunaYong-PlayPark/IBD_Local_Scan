@@ -8,6 +8,7 @@ import build_pc_steamdb_discovery_candidates as pc
 ROOT = Path(__file__).resolve().parents[1]
 MEETING_PACK_OUTPUT_ROOT = ROOT / "data" / "output" / "meeting_pack"
 MEETING_DROP_ROOT = ROOT / "data" / "input" / "meeting_drop"
+MASTER_TITLE_MAPPING_PATH = ROOT / "data" / "reference" / "master_title_mapping.csv"
 
 UNKNOWN = "unconfirmed"
 
@@ -84,6 +85,19 @@ def output_path(meeting_date):
 
 def default_research_overlay_path(meeting_date):
     return MEETING_DROP_ROOT / meeting_date / "game_enrichment_research.csv"
+
+
+def title_aliases_from_master_mapping(path=MASTER_TITLE_MAPPING_PATH):
+    path = Path(path)
+    if not path.exists():
+        return {}
+    aliases = {}
+    for row in read_csv(path):
+        original = pc.normalize_title(row.get("original_title"))
+        english = pc.normalize_title(row.get("english_display_title"))
+        if original and english:
+            aliases[original] = english
+    return aliases
 
 
 def normalize_date(value):
@@ -169,10 +183,13 @@ def read_research_overlay(path):
         return {}
     rows = read_csv(path)
     overlay = {}
+    aliases = title_aliases_from_master_mapping()
     for row in rows:
         key = pc.normalize_title(row.get("report_name"))
         if key:
             overlay[key] = row
+            if key in aliases:
+                overlay[aliases[key]] = row
     return overlay
 
 

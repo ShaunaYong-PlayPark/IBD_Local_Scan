@@ -144,7 +144,7 @@ GAME_KEY_DETAIL_OVERRIDES = {
     "ragnarok the new world": "Ragnarok: The New World is a mobile open-world MMORPG built around class progression, exploration, monster combat, trading, and social play. Its USP is the Ragnarok IP in a broader open-world mobile format, giving an established SEA franchise a newer exploration-led presentation.",
     "digimon up": "DIGIMON UP is a mobile idle-raising RPG where players collect Digimon, raise them over time, and progress through lightweight battles and upgrades. Its USP is the Digimon IP combined with a low-maintenance mobile raising loop that fits short daily sessions.",
     "ms freedom horizon": "MS: Freedom Horizon is a mobile mecha strategy RPG where players pilot mechs, build battle lineups, and use turn-based tactics against wasteland enemies. Its USP is a mecha-collection fantasy with deck-style combat, giving strategy RPG players a robot-focused alternative to character-only gachas.",
-    "聖杯神諭": "聖杯神諭 is a mobile fantasy RPG built around hero progression, party-building, and role-playing combat. Its USP is a fantasy collection-and-growth loop aimed at players who want familiar mobile RPG systems in a compact regional release.",
+    "oracle of the holy grail": "Oracle of the Holy Grail is a mobile fantasy RPG built around hero progression, party-building, and role-playing combat. Its USP is a fantasy collection-and-growth loop aimed at players who want familiar mobile RPG systems in a compact regional release.",
     "the walking dead aftermath": "The Walking Dead: Aftermath is a mobile roguelite survival RPG where players fight walkers, make survivor choices, upgrade characters, and manage risk across repeated runs. Its USP is the Walking Dead license applied to mobile survival progression, combining recognizable horror IP with roguelite replayability.",
     "hololive dreams": "hololive Dreams is a mobile-led Rhythm RPG where players use hololive talent characters and music-driven battles across iOS, Android, and Steam. Its USP is the hololive fan ecosystem packaged into a cross-platform game, combining idol/music appeal with RPG progression.",
     "cookierun crumble idle rpg": "CookieRun: Crumble - Idle RPG is a mobile idle RPG where Cookie squads battle automatically while players upgrade teams, collect characters, and improve progression efficiency. Its USP is the CookieRun franchise adapted into a hands-off RPG loop, making the brand playable for idle-game audiences.",
@@ -519,7 +519,13 @@ def source_news_context(rows, schedule):
     review_rows = read_csv(MEETING_PACK_OUTPUT_ROOT / meeting_date / NEWS_CONTEXT_FILENAME)
     output = []
     for row in review_rows:
-        if str(row.get("include_in_final_report") or "").strip().lower() != "yes":
+        context_type = row.get("context_type")
+        decision = str(row.get("editor_decision") or "").strip().lower()
+        include_value = str(row.get("include_in_final_report") or "").strip().lower()
+        if context_type == "industry_trend":
+            if decision == "exclude" or include_value == "no":
+                continue
+        elif include_value != "yes":
             continue
         event_date = parse_date(row.get("event_date")) or parse_date(row.get("published_at"))
         if period_start and period_end and (not event_date or not period_start <= event_date <= period_end):
@@ -909,6 +915,11 @@ def news_context_card(row, label):
 def news_context_section(news_context):
     release_rows = [r for r in news_context if r.get("context_type") == "selected_game_release_news"]
     announcement_rows = [r for r in news_context if r.get("context_type") == "high_score_game_announcement"]
+    industry_rows = [r for r in news_context if r.get("context_type") == "industry_trend"]
+    industry_cards = "".join(news_context_card(row, "Industry trend") for row in industry_rows) or empty_state(
+        "No industry trends for this report period",
+        "No high-signal, non-repeated Game News Radar industry trend qualified for this brief.",
+    )
     release_cards = "".join(news_context_card(row, "Release support") for row in release_rows) or empty_state(
         "No release-support news matched selected games",
         "Game Release radar items only appear here when they match a Sensor Tower or SteamDB selected game.",
@@ -919,6 +930,8 @@ def news_context_section(news_context):
     )
     return f"""<section class="brief-section news-context-section">
   <div class="section-heading"><div><h2>Game News Context</h2><p>Game News Radar items used as supporting context for the final brief. Releases support selected games only; announcements are ranked news signals for the report period.</p></div></div>
+  <h3 class="signal-heading">Industry Trends <span>High-signal, non-repeated trends affecting the games market.</span></h3>
+  <div class="news-context-grid">{industry_cards}</div>
   <h3 class="signal-heading">Game Announcements <span>High-score future-release or major game news items.</span></h3>
   <div class="news-context-grid">{announcement_cards}</div>
   <h3 class="signal-heading">Release Support <span>Release articles matched to games already selected by Sensor Tower or SteamDB.</span></h3>

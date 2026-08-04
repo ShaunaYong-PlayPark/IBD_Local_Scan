@@ -20,9 +20,12 @@ PUBLIC_GAME_RADAR_URL = (
 )
 
 DEFAULT_ANNOUNCEMENT_MIN_SCORE = 70
+DEFAULT_INDUSTRY_MIN_SCORE = 70
+DEFAULT_INDUSTRY_MAX_ROWS = 3
 
 SECTION_GAME_RELEASES = "game_releases"
 SECTION_GAME_ANNOUNCEMENTS = "game_announcements"
+SECTION_INDUSTRY_REPORTS = "industry_reports"
 
 CSV_FIELDS = [
     "meeting_date",
@@ -47,6 +50,7 @@ CSV_FIELDS = [
     "last_seen_at",
     "radar_generated_at",
     "inclusion_reason",
+    "story_key",
 ]
 
 
@@ -205,6 +209,79 @@ def hot_score(item):
         return 0
 
 
+def story_key(item):
+    text = normalize_title(item_text(item))
+    if not text:
+        return normalize_title(item.get("url", ""))
+    theme_keywords = [
+        (
+            "physical_media_shift",
+            [
+                "physical",
+                "disc",
+                "discs",
+                "digital only",
+                "digital sales",
+                "digital playstation sales",
+                "digital pulling",
+                "halting physical",
+                "download code",
+            ],
+        ),
+        ("xbox_restructure", ["xbox", "layoffs", "revenue plunges", "game pass", "zenimax", "bethesda"]),
+        ("steam_market_revenue", ["steam revenue", "steam", "top grossing", "new ip"]),
+        ("mobile_iap_ads", ["mobile iap", "iap revenue", "ad spend", "mobile gaming"]),
+        ("publisher_financial_results", ["q2 results", "q2 revenue", "revenue rises", "revenue up"]),
+        ("publisher_mna", ["acquisition", "merger", "pif", "regulatory"]),
+        ("ai_game_tools", ["generative ai", "ai agents", "spatial reasoning", "on device"]),
+        ("creator_marketing", ["creators", "viewership", "influencer"]),
+        ("funding", ["funding", "raised", "prototype funding"]),
+        ("layoffs", ["layoff", "layoffs", "cut workforce", "liquidate"]),
+    ]
+    for key, keywords in theme_keywords:
+        if any(keyword in text for keyword in keywords):
+            return key
+    words = [word for word in text.split() if len(word) > 3]
+    return " ".join(words[:8]) if words else text
+
+
+def prior_context_keys(meeting_date):
+    prior = {"urls": set(), "titles": set(), "stories": set()}
+    current = parse_date(meeting_date)
+    if not current or not MEETING_PACK_OUTPUT_ROOT.exists():
+        return prior
+    for folder in MEETING_PACK_OUTPUT_ROOT.iterdir():
+        if not folder.is_dir():
+            continue
+        folder_date = parse_date(folder.name)
+        if not folder_date or folder_date >= current:
+            continue
+        for filename in ("news_context_review.csv", "news_context_layer.csv"):
+            path = folder / filename
+            if not path.exists():
+                continue
+            for row in read_csv(path):
+                if row.get("url"):
+                    prior["urls"].add(row["url"])
+                title_key = normalize_title(row.get("title_en") or row.get("title"))
+                if title_key:
+                    prior["titles"].add(title_key)
+                if row.get("story_key"):
+                    prior["stories"].add(row["story_key"])
+            break
+    return prior
+
+
+def repeated_context(item, prior, key=""):
+    url = item.get("url", "")
+    title_key = normalize_title(item.get("title_en") or item.get("title"))
+    return bool(
+        (url and url in prior["urls"])
+        or (title_key and title_key in prior["titles"])
+        or (key and key in prior["stories"])
+    )
+
+
 def context_row(item, payload, meeting_date, start, end, context_type, matched_game="", match_method="", reason=""):
     event_date = item_event_date(item)
     return {
@@ -230,13 +307,26 @@ def context_row(item, payload, meeting_date, start, end, context_type, matched_g
         "last_seen_at": item.get("last_seen_at", ""),
         "radar_generated_at": payload.get("generated_at", "") if isinstance(payload, dict) else "",
         "inclusion_reason": reason,
+        "story_key": story_key(item),
     }
 
 
-def build_rows(game_rows, payload, meeting_date, start, end, announcement_min_score=DEFAULT_ANNOUNCEMENT_MIN_SCORE):
+def build_rows(
+    game_rows,
+    payload,
+    meeting_date,
+    start,
+    end,
+    announcement_min_score=DEFAULT_ANNOUNCEMENT_MIN_SCORE,
+    industry_min_score=DEFAULT_INDUSTRY_MIN_SCORE,
+    industry_max_rows=DEFAULT_INDUSTRY_MAX_ROWS,
+):
     selected_games = selected_game_keys(game_rows)
     rows = []
     seen_urls = set()
+    seen_stories = set()
+    industry_rows = []
+    prior = prior_context_keys(meeting_date)
 
     for item in radar_candidates(payload):
         if not in_report_period(item, start, end):
@@ -246,6 +336,9 @@ def build_rows(game_rows, payload, meeting_date, start, end, announcement_min_sc
         score = hot_score(item)
         url = item.get("url", "")
         if url and url in seen_urls:
+            continue
+        key = story_key(item)
+        if repeated_context(item, prior, key):
             continue
 
         if section == SECTION_GAME_RELEASES:
@@ -285,9 +378,34 @@ def build_rows(game_rows, payload, meeting_date, start, end, announcement_min_sc
             )
             if url:
                 seen_urls.add(url)
+            continue
 
+        if section == SECTION_INDUSTRY_REPORTS and score >= industry_min_score:
+            if key and key in seen_stories:
+                continue
+            industry_rows.append(
+                context_row(
+                    item,
+                    payload,
+                    meeting_date,
+                    start,
+                    end,
+                    "industry_trend",
+                    "",
+                    "industry_story_theme",
+                    "Industry trend selected from high-score radar item; repeated story themes from earlier briefs are suppressed.",
+                )
+            )
+            if url:
+                seen_urls.add(url)
+            if key:
+                seen_stories.add(key)
+
+    industry_rows.sort(key=lambda row: (-int(row["hot_score"] or 0), row["event_date"], row["source"]))
+    rows.extend(industry_rows[:industry_max_rows])
     rows.sort(
         key=lambda row: (
+            row["context_type"] != "industry_trend",
             row["context_type"] != "high_score_game_announcement",
             -int(row["hot_score"] or 0),
             row["event_date"],
