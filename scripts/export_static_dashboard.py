@@ -27,6 +27,7 @@ MEETING_PACK_OUTPUT_ROOT = OUT / "meeting_pack"
 NEWS_CONTEXT_FILENAME = "news_context_review.csv"
 GAME_REPORT_FILENAME = "game_report_layer.csv"
 GAME_ENRICHED_FILENAME = "game_enriched_layer.csv"
+PROOF_RUNS = DOCS / "proof-runs"
 
 
 NAV_ITEMS = [
@@ -529,9 +530,25 @@ def weekly_staging_payload(weekly_summary, schedule):
     }
 
 
-def data_as_of(metadata):
+def data_as_of(metadata, rows=None):
     value = metadata.get("sensor_tower_data_as_of_date") or metadata.get("last_successful_sensor_tower_report_end_date")
-    return display_date(value) or "N/A"
+    value_date = parse_date(value)
+    report_end = parse_date((rows or [{}])[0].get("report_end_date", "")) if rows else None
+    if report_end and (not value_date or value_date < report_end):
+        value_date = report_end
+    return display_date(value_date.isoformat()) if value_date else "N/A"
+
+
+def normalized_metadata(metadata, rows):
+    normalized = dict(metadata)
+    if rows:
+        report_end = rows[0].get("report_end_date", "")
+        value_date = parse_date(normalized.get("sensor_tower_data_as_of_date", ""))
+        report_end_date = parse_date(report_end)
+        if report_end_date and (not value_date or value_date < report_end_date):
+            normalized["sensor_tower_data_as_of_date"] = report_end
+            normalized["last_successful_sensor_tower_report_end_date"] = report_end
+    return normalized
 
 
 def signal_group(row):
@@ -592,7 +609,7 @@ def page_shell(title, active, body, rows, schedule, metadata):
           <b>{escape(active_name)}</b>
           <span>Period: {escape(start or "N/A")} to {escape(end or "N/A")}</span>
           <span>Meeting: {escape(meeting or "N/A")}</span>
-          <span>Data as of: {escape(data_as_of(metadata))}</span>
+          <span>Data as of: {escape(data_as_of(metadata, rows))}</span>
         </div>
         <div class="top-actions compact-actions">
           <a class="btn ghost" href="historical-briefs.html">Previous Briefs</a>
@@ -886,17 +903,71 @@ def latest_page(rows, schedule, metadata, view="cards", news_context=None):
     return page_shell("Latest Brief", "latest", body, rows, schedule, metadata)
 
 
+def proof_run_records():
+    records = []
+    if not PROOF_RUNS.exists():
+        return records
+    for folder in sorted(PROOF_RUNS.iterdir(), reverse=True):
+        if not folder.is_dir():
+            continue
+        payload_path = folder / "final-report.json"
+        brief_path = folder / "latest-brief.html"
+        if not payload_path.exists() or not brief_path.exists():
+            continue
+        payload = read_json(payload_path, {})
+        proof_rows = payload.get("rows") or []
+        proof_metadata = payload.get("metadata") or {}
+        proof_schedule = payload.get("schedule") or {}
+        start, end = report_period(proof_rows, proof_schedule)
+        meeting = meeting_date_for(proof_rows, proof_schedule) or display_date(folder.name)
+        records.append(
+            {
+                "folder": folder.name,
+                "href": f"proof-runs/{folder.name}/latest-brief.html",
+                "period": f"{start} to {end}" if start or end else "N/A",
+                "meeting": meeting or "N/A",
+                "data_as_of": data_as_of(proof_metadata, proof_rows),
+                "row_count": len(proof_rows),
+                "news_count": len(payload.get("news_context") or []),
+            }
+        )
+    return records
+
+
+def proof_archive_cards(records):
+    if not records:
+        return empty_state(
+            "No proof reports yet.",
+            "Historical proof reports will appear here after the proof-run exporter saves them.",
+        )
+    cards = []
+    for record in records:
+        cards.append(
+            f"""<article class="archive-card reading-card">
+  <div>
+    <span class="status-chip neutral">Proof run</span>
+    <h3>{escape(record["meeting"])} mock report</h3>
+    <p>{escape(record["period"])}</p>
+  </div>
+  <div class="archive-meta">
+    <span>Data as of: {escape(record["data_as_of"])}</span>
+    <span>{record["row_count"]} games · {record["news_count"]} news items</span>
+    <a class="btn primary" href="{escape(record["href"])}">Open brief</a>
+  </div>
+</article>"""
+        )
+    return "".join(cards)
+
+
 def historical_page(rows, schedule, metadata, weekly_summary=None):
     in_progress_start, in_progress_end = in_progress_period(schedule)
     staging_note = staging_summary_text(weekly_summary or {})
-    archive_empty = empty_state(
-        "No older finalized briefs yet.",
-        "Finalized reports will move here after a newer meeting-day brief replaces them.",
-    )
+    proof_records = proof_run_records()
+    archive_cards = proof_archive_cards(proof_records)
     body = (
         page_header("Historical Briefs", "Brief archive", "Open past market briefs by reporting period.")
         + '<section class="archive-toolbar"><a class="btn primary" href="latest-brief.html">Latest</a><input type="search" id="archiveSearch" placeholder="Search briefs"></section>'
-        + f'<div class="combined-archive-grid"><section><h2>Briefs</h2><div class="archive-grid">{archive_empty}</div></section>'
+        + f'<div class="combined-archive-grid"><section><h2>Proof reports</h2><div class="archive-grid">{archive_cards}</div></section>'
         + f'<aside class="combined-timeline"><h2>Upcoming / In progress</h2><div class="timeline-list compact"><article class="timeline-item"><div class="timeline-date"><span>Next meeting</span><b>{escape(display_date(schedule.get("upcoming_meeting_date", "")) or "N/A")}</b></div><div class="timeline-detail"><h3>{escape(in_progress_start or "N/A")} to {escape(in_progress_end or "N/A")}</h3><p>{escape(staging_note)}</p></div></article></div></aside></div>'
     )
     return page_shell("Historical Briefs", "historical", body, rows, schedule, metadata)
@@ -936,6 +1007,7 @@ def write_rows_csv(path, rows):
 
 def write_data(rows, metadata, schedule, weekly_summary=None, news_context=None):
     DATA.mkdir(parents=True, exist_ok=True)
+    metadata = normalized_metadata(metadata, rows)
     write_text(
         DATA / "final-report.json",
         json.dumps(

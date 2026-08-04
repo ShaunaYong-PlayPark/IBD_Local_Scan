@@ -8,7 +8,7 @@
       "Inclusion Reason": "Included as a new SG commercial signal because prior revenue was $0 and current SG revenue crossed the report threshold.",
       "Game Title": "Ragnarok: The New World",
       "English Display Title": "Ragnarok: The New World",
-      "Original Title": "RO仙境傳説：世界之旅",
+      "Original Title": "ROä»™å¢ƒå‚³èª¬ï¼šä¸–ç•Œä¹‹æ—…",
       "Detected Language": "",
       "Machine English Title": "",
       "Manual English Title": "",
@@ -117,9 +117,9 @@
       "SG Gross Revenue": "3104.60",
       "SG Downloads": "452",
       "Inclusion Reason": "Included as a new SG commercial signal because prior revenue was $0 and current SG revenue crossed the report threshold.",
-      "Game Title": "聖杯神諭",
-      "English Display Title": "聖杯神諭",
-      "Original Title": "聖杯神諭",
+      "Game Title": "è–æ¯ç¥žè«­",
+      "English Display Title": "è–æ¯ç¥žè«­",
+      "Original Title": "è–æ¯ç¥žè«­",
       "Detected Language": "",
       "Machine English Title": "",
       "Manual English Title": "",
@@ -298,10 +298,10 @@
     }
   ],
   "metadata": {
-    "sensor_tower_data_as_of_date": "2026-07-13",
+    "sensor_tower_data_as_of_date": "2026-07-20",
     "last_successful_sensor_tower_refresh_at": "2026-07-21T01:12:47.146159+00:00",
     "last_successful_sensor_tower_report_start_date": "2026-06-23",
-    "last_successful_sensor_tower_report_end_date": "2026-07-13",
+    "last_successful_sensor_tower_report_end_date": "2026-07-20",
     "updated_by": "scripts/meeting_date_final_report.py"
   },
   "schedule": {
@@ -338,7 +338,7 @@
       "source_tier": "regional_gaming_media",
       "source_tier_label": "Regional gaming media",
       "region": "TH",
-      "title": "Kogado Studio ประกาศ Remaster ภาคสอง Neosphere of The Deep-blue Sky: Legacy มาแน่ปี 2027",
+      "title": "Kogado Studio à¸›à¸£à¸°à¸à¸²à¸¨ Remaster à¸ à¸²à¸„à¸ªà¸­à¸‡ Neosphere of The Deep-blue Sky: Legacy à¸¡à¸²à¹à¸™à¹ˆà¸›à¸µ 2027",
       "title_en": "Kogado Studio announces remaster of the second installment, Neosphere of The Deep-blue Sky: Legacy, coming in 2027.",
       "url": "https://compgamer.com/neosphere-of-the-deep-blue-sky-legacy-announced/?utm_source=rss&utm_medium=rss&utm_campaign=neosphere-of-the-deep-blue-sky-legacy-announced",
       "published_at": "2026-07-20T04:07:05+00:00",

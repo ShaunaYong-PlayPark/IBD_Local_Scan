@@ -82,7 +82,7 @@
       "Inclusion Reason": "Included as a new SG commercial signal because prior revenue was $0 and current SG revenue crossed the report threshold.",
       "Game Title": "Qi Refining 3000 Levels: The Fallen Empress Forces Me to Ascend",
       "English Display Title": "Qi Refining 3000 Levels: The Fallen Empress Forces Me to Ascend",
-      "Original Title": "練氣3000層：墮落女帝逼我飛升",
+      "Original Title": "ç·´æ°£3000å±¤ï¼šå¢®è½å¥³å¸é€¼æˆ‘é£›å‡",
       "Detected Language": "",
       "Machine English Title": "",
       "Manual English Title": "",
@@ -119,7 +119,7 @@
       "Inclusion Reason": "Included as a new SG commercial signal because prior revenue was $0 and current SG revenue crossed the report threshold.",
       "Game Title": "Once upon a time, there was a street",
       "English Display Title": "Once upon a time, there was a street",
-      "Original Title": "從前有條街",
+      "Original Title": "å¾žå‰æœ‰æ¢è¡—",
       "Detected Language": "",
       "Machine English Title": "",
       "Manual English Title": "",
@@ -187,10 +187,10 @@
     }
   ],
   "metadata": {
-    "sensor_tower_data_as_of_date": "2026-07-13",
+    "sensor_tower_data_as_of_date": "2026-07-06",
     "last_successful_sensor_tower_refresh_at": "2026-07-21T01:12:47.146159+00:00",
     "last_successful_sensor_tower_report_start_date": "2026-06-23",
-    "last_successful_sensor_tower_report_end_date": "2026-07-13",
+    "last_successful_sensor_tower_report_end_date": "2026-07-06",
     "updated_by": "scripts/meeting_date_final_report.py"
   },
   "schedule": {

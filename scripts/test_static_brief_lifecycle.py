@@ -191,6 +191,7 @@ def main():
         "weekly_summary": exporter.WEEKLY_SUMMARY,
         "schedule": exporter.SCHEDULE,
         "meeting_pack_output_root": exporter.MEETING_PACK_OUTPUT_ROOT,
+        "proof_runs": exporter.PROOF_RUNS,
     }
 
     with repo_temp_dir("ibd_static_lifecycle_test_") as tmp_path:
@@ -212,6 +213,7 @@ def main():
         exporter.WEEKLY_SUMMARY = output / "weekly_candidate_capture_summary.json"
         exporter.SCHEDULE = config / "static_report_schedule.json"
         exporter.MEETING_PACK_OUTPUT_ROOT = output / "meeting_pack"
+        exporter.PROOF_RUNS = docs / "proof-runs"
 
         write_csv(
             exporter.LATEST_FINALIZED_CSV,
@@ -275,7 +277,7 @@ def main():
         assert_true("Fixture-approved context" in latest_html, "Latest brief should show reviewed editor notes.")
         assert_true("Staging Game" not in latest_html, "Weekly staging output must not replace Latest Brief.")
         assert_true("Current brief" not in archive_html, "Archive must not label staging as Current brief.")
-        assert_true("No older finalized briefs yet." in archive_html, "Archive should show empty state without older briefs.")
+        assert_true("No proof reports yet." in archive_html, "Archive should show empty state without proof runs.")
         assert_true(
             "No weekly candidates found for this extraction window." in archive_html,
             "Staging empty state should appear outside the Latest Brief.",
@@ -302,6 +304,7 @@ def main():
     exporter.WEEKLY_SUMMARY = originals["weekly_summary"]
     exporter.SCHEDULE = originals["schedule"]
     exporter.MEETING_PACK_OUTPUT_ROOT = originals["meeting_pack_output_root"]
+    exporter.PROOF_RUNS = originals["proof_runs"]
     print("STATIC_BRIEF_LIFECYCLE_PASS")
 
 
