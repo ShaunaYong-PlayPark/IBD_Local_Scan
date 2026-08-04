@@ -986,14 +986,14 @@ def proof_archive_cards(records):
     for record in records:
         cards.append(
             f"""<article class="archive-card reading-card">
-  <div>
+  <div class="archive-main">
     <span class="status-chip neutral">Proof run</span>
     <h3>{escape(record["meeting"])} mock report</h3>
     <p>{escape(record["period"])}</p>
   </div>
   <div class="archive-meta">
     <span>Data as of: {escape(record["data_as_of"])}</span>
-    <span>{record["row_count"]} games · {record["news_count"]} news items</span>
+    <span>{record["row_count"]} games &middot; {record["news_count"]} news items</span>
     <a class="btn primary" href="{escape(record["href"])}">Open brief</a>
   </div>
 </article>"""
@@ -1184,8 +1184,14 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 .tracker-filters input,.tracker-filters select,.archive-toolbar input{min-width:min(280px,100%)!important}
 .combined-archive-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(280px,360px)!important;gap:16px!important;align-items:start!important}
 .archive-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))!important;gap:14px!important}
-.archive-card{border-radius:15px!important;padding:16px!important}
-.archive-card.reading-card{grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important}
+.archive-card{border-radius:15px!important;padding:18px!important;min-width:0!important}
+.archive-card.reading-card{display:grid!important;grid-template-columns:minmax(0,1fr)!important;align-items:start!important;gap:14px!important}
+.archive-card .archive-main{min-width:0!important}
+.archive-card .archive-main h3{font-size:21px!important;line-height:1.2!important;margin:8px 0 6px!important;overflow-wrap:anywhere!important}
+.archive-card .archive-main p{font-size:15px!important;line-height:1.45!important;margin:0!important;color:var(--muted)!important}
+.archive-card .archive-meta{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:9px!important;min-width:0!important;color:var(--muted)!important}
+.archive-card .archive-meta span{display:inline-flex!important;white-space:normal!important;line-height:1.35!important;min-width:0!important}
+.archive-card .archive-meta .btn{margin-top:2px!important;white-space:nowrap!important}
 .combined-timeline{position:sticky!important;top:122px!important;border-radius:15px!important}
 .compact-kv{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))!important}
 .filter-chips{margin:8px 0 12px!important}

@@ -37,6 +37,15 @@ def copy_outputs(meeting_date):
         if not source.exists():
             raise RuntimeError(f"Expected export output missing: {source}")
         shutil.copy2(source, target)
+        if target.suffix == ".html":
+            html = target.read_text(encoding="utf-8")
+            html = html.replace('href="assets/static-dashboard.css"', 'href="../../assets/static-dashboard.css"')
+            html = html.replace('src="assets/static-dashboard.js"', 'src="../../assets/static-dashboard.js"')
+            html = html.replace('href="latest-brief.html"', 'href="./latest-brief.html"')
+            html = html.replace('href="index.html"', 'href="./index.html"')
+            html = html.replace('href="historical-briefs.html"', 'href="../../historical-briefs.html"')
+            html = html.replace('href="game-tracker.html"', 'href="../../game-tracker.html"')
+            target.write_text(html, encoding="utf-8")
     print(f"Copied proof outputs to {destination}")
 
 
