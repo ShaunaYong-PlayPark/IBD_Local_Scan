@@ -140,7 +140,7 @@ def relationship(classification):
 def platforms(row):
     classification = row.get("report_classification", "")
     if classification == "mobile_led_cross_platform":
-        return "mobile, PC"
+        return "iOS, Android, Steam"
     if classification == "mobile_only":
         return "mobile"
     if classification == "pc_only":

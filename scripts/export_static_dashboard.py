@@ -1053,10 +1053,16 @@ def tracker_rows_across_briefs(fallback_rows):
     if not records:
         return fallback_rows
     tracker_rows = []
+    seen_titles = set()
     for record in records:
         payload_path = PROOF_RUNS / record["meeting_key"] / "final-report.json"
         payload = read_json(payload_path, {})
         for row in payload.get("rows") or []:
+            title_key = normalized_key(title_for(row))
+            if title_key and title_key in seen_titles:
+                continue
+            if title_key:
+                seen_titles.add(title_key)
             tracker_row = dict(row)
             label = f'{record["meeting"]} mock report'
             tracker_row["Related Brief"] = f'{label} | {record["period"]}'

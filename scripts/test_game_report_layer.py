@@ -52,6 +52,14 @@ def write_csv(path, rows, fields):
         writer.writerows(rows)
 
 
+def write_tsv(path, rows, fields):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def mobile_row(title, unified_id):
     return {
         "meeting_date": "2026-07-28",
@@ -154,9 +162,62 @@ def test_mobile_appendix_rows_are_not_inputs_to_layer():
     assert_true("mobile_appendix.csv" not in str(layer.mobile_main_report_path("2026-07-28")), "mobile appendix is not read")
 
 
+def test_chart_backed_pc_match_promotes_ragnarok():
+    tmp = temp_root()
+    original_root = layer.MEETING_PACK_OUTPUT_ROOT
+    original_drop = layer.MEETING_DROP_ROOT
+    try:
+        layer.MEETING_PACK_OUTPUT_ROOT = tmp / "meeting_pack"
+        layer.MEETING_DROP_ROOT = tmp / "meeting_drop"
+        meeting_dir = layer.MEETING_PACK_OUTPUT_ROOT / "2026-08-04"
+        write_csv(meeting_dir / "mobile_main_report.csv", [], MOBILE_FIELDS)
+        ragnarok_pc = pc_row("Ragnarok: The New World", "4212480", "2026-07-27", 4914, False, True, "appendix_global_context_only")
+        ragnarok_pc["report_start_date"] = "2026-07-21"
+        ragnarok_pc["report_end_date"] = "2026-08-01"
+        write_csv(meeting_dir / "pc_meeting_pack.csv", [ragnarok_pc], PC_FIELDS)
+        chart_fields = [
+            "Country", "Category", "Chart", "Date", "Ranking", "App ID", "App name", "Company",
+            "Release date", "Downloads", "Revenue ($)", "iPhone downloads", "iPhone revenue ($)",
+            "iPad downloads", "iPad revenue ($)",
+        ]
+        write_tsv(
+            layer.MEETING_DROP_ROOT / "2026-08-04" / "mobile" / "Sensor_Tower_Category_Rankings_Android_SG_Game_2026-08-03.csv",
+            [{
+                "Country": "SG", "Category": "Game", "Chart": "topgrossing", "Date": "2026-08-03",
+                "Ranking": "26", "App ID": "com.ggv.roworldsea.aos", "App name": "Ragnarok: The New World",
+                "Company": "Gravity Game Vision", "Release date": "2026-07-14 00:00:00 UTC",
+                "Downloads": "122", "Revenue ($)": "1796.49",
+            }],
+            chart_fields,
+        )
+        write_tsv(
+            layer.MEETING_DROP_ROOT / "2026-08-04" / "mobile" / "Sensor_Tower_Category_Rankings_iPhone_SG_Games_2026-08-03.csv",
+            [{
+                "Country": "SG", "Category": "Games", "Chart": "topgrossingapplications", "Date": "2026-08-03",
+                "Ranking": "17", "App ID": "6754275005", "App name": "Ragnarok: The New World",
+                "Company": "Gravity Game Vision Limited", "Release date": "2026-07-15 00:00:00 UTC",
+                "iPhone downloads": "188", "iPhone revenue ($)": "4074.85",
+                "iPad downloads": "19", "iPad revenue ($)": "238.98",
+            }],
+            chart_fields,
+        )
+        _path, rows = layer.build("2026-08-04")
+        ragnarok = [row for row in rows if row.get("english_report_name") == "Ragnarok: The New World"]
+        assert_equal(len(ragnarok), 1, "chart-backed Ragnarok is not duplicated")
+        assert_equal(ragnarok[0]["report_classification"], "mobile_led_cross_platform", "chart-backed Ragnarok classification")
+        assert_equal(ragnarok[0]["steam_app_id"], "4212480", "Ragnarok Steam match")
+        assert_equal(ragnarok[0]["steamdb_peak"], "4914", "Ragnarok Steam peak")
+        assert_equal(ragnarok[0]["steamdb_reviews"], "100", "Ragnarok Steam reviews fixture")
+        assert_equal(ragnarok[0]["chart_rank_match_status"], "matched", "Ragnarok chart match")
+    finally:
+        layer.MEETING_PACK_OUTPUT_ROOT = original_root
+        layer.MEETING_DROP_ROOT = original_drop
+
+
 def main():
     test_build_game_report_layer_classifications()
     test_mobile_appendix_rows_are_not_inputs_to_layer()
+    test_chart_backed_pc_match_promotes_ragnarok()
     print("GAME_REPORT_LAYER_TEST_PASS")
 
 
