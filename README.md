@@ -45,6 +45,22 @@ Build the static dashboard from existing local outputs:
 python scripts/export_static_dashboard.py
 ```
 
+Build from a specific meeting pack without editing the committed schedule:
+
+```powershell
+python scripts/export_static_dashboard.py --meeting-date 2026-08-04
+```
+
+When `data/output/meeting_pack/<meeting-date>/game_report_layer.csv` exists,
+the static exporter uses the game-layer path directly:
+
+```text
+game_report_layer.csv + game_enriched_layer.csv + news_context_review.csv
+```
+
+If no matching game-layer output exists, the exporter falls back to the latest
+finalized brief CSV.
+
 Open locally by double-clicking:
 
 ```text

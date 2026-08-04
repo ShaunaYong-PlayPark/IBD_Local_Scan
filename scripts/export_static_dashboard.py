@@ -1,7 +1,7 @@
+import argparse
 import csv
 import json
 import re
-import shutil
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from html import escape
@@ -25,6 +25,8 @@ METADATA = LOCAL_APP / "extraction_metadata.json"
 WEEKLY_SUMMARY = OUT / "weekly_candidate_capture_summary.json"
 MEETING_PACK_OUTPUT_ROOT = OUT / "meeting_pack"
 NEWS_CONTEXT_FILENAME = "news_context_review.csv"
+GAME_REPORT_FILENAME = "game_report_layer.csv"
+GAME_ENRICHED_FILENAME = "game_enriched_layer.csv"
 
 
 NAV_ITEMS = [
@@ -124,6 +126,151 @@ def number(value):
         return f"{float(str(value or '0').replace(',', '')):,.0f}"
     except ValueError:
         return str(value or "0")
+
+
+def normalized_key(value):
+    text = str(value or "").lower()
+    text = re.sub(r"[^0-9a-z\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def meeting_date_from_schedule(schedule):
+    meeting = parse_date(schedule.get("upcoming_meeting_date", ""))
+    return meeting.isoformat() if meeting else ""
+
+
+def meeting_pack_dir(meeting_date):
+    return MEETING_PACK_OUTPUT_ROOT / meeting_date
+
+
+def game_report_path(meeting_date):
+    return meeting_pack_dir(meeting_date) / GAME_REPORT_FILENAME
+
+
+def game_enriched_path(meeting_date):
+    return meeting_pack_dir(meeting_date) / GAME_ENRICHED_FILENAME
+
+
+def game_title(row):
+    return row.get("english_report_name") or row.get("unified_name") or row.get("pc_title") or row.get("report_name") or "Untitled"
+
+
+def game_layer_signal(row):
+    classification = row.get("report_classification", "")
+    sg_gross = safe_float(row.get("sg_revenue_gross"))
+    steam_peak = safe_float(row.get("steamdb_peak"))
+    if classification == "pc_only":
+        return "Strong Market Signal" if steam_peak >= 10000 else "Emerging Market Signal"
+    return "Strong Market Signal" if sg_gross >= 3000 else "Emerging Market Signal"
+
+
+def game_layer_platform(row, enriched=None):
+    if enriched and enriched.get("platforms_confirmed"):
+        return enriched.get("platforms_confirmed", "")
+    classification = row.get("report_classification", "")
+    if classification == "mobile_led_cross_platform":
+        return "Mobile + PC"
+    if classification == "pc_only":
+        return "PC"
+    return "Mobile"
+
+
+def game_layer_reason(row, enriched=None):
+    if enriched:
+        summary = " ".join(part for part in (enriched.get("summary_sentence_1"), enriched.get("summary_sentence_2")) if part)
+        if summary:
+            return summary
+    classification = row.get("report_classification", "")
+    if classification == "pc_only":
+        peak = number(row.get("steamdb_peak"))
+        return f"PC-only SteamDB signal with peak concurrent users of {peak}."
+    if classification == "mobile_led_cross_platform":
+        return "Mobile-led cross-platform title selected from Sensor Tower Singapore evidence with matched PC context."
+    return "Mobile title selected from Sensor Tower Singapore revenue, download, and rank evidence."
+
+
+def top_markets_text(row):
+    parts = []
+    for index in range(1, 5):
+        country = row.get(f"sea_market_{index}_country", "")
+        revenue = safe_float(row.get(f"sea_market_{index}_revenue_gross"))
+        downloads = safe_float(row.get(f"sea_market_{index}_downloads"))
+        if country and (revenue or downloads):
+            parts.append(f"{country} (${revenue:,.0f} / {downloads:,.0f} DL)")
+    return "Top Mkts: " + " || ".join(parts) if parts else ""
+
+
+def sg_ranks_text(row):
+    ios = f"iOS (DL #{row.get('ios_top_free_rank') or 'NA'} / Rev #{row.get('ios_top_grossing_rank') or 'NA'})"
+    android = f"Android (DL #{row.get('android_top_free_rank') or 'NA'} / Rev #{row.get('android_top_grossing_rank') or 'NA'})"
+    return f"SG App Store Ranks: {ios} || {android}"
+
+
+def game_layer_report_rows(meeting_date):
+    game_rows = read_csv(game_report_path(meeting_date))
+    if not game_rows:
+        return []
+    enriched_rows = read_csv(game_enriched_path(meeting_date))
+    enriched_by_title = {normalized_key(row.get("report_name")): row for row in enriched_rows if normalized_key(row.get("report_name"))}
+    report_rows = []
+    for row in game_rows:
+        title = game_title(row)
+        enriched = enriched_by_title.get(normalized_key(title), {})
+        release_date = (
+            enriched.get("release_date_used")
+            or row.get("sg_release_date_reference")
+            or row.get("pc_release_date")
+            or ""
+        )
+        publisher = enriched.get("publisher") or row.get("unified_publisher_name") or "Publisher unavailable"
+        report_rows.append(
+            {
+                "Signal Type": game_layer_signal(row),
+                "Signal Definition": "Game-layer final report row.",
+                "SG Gross Revenue": row.get("sg_revenue_gross") or "0",
+                "SG Downloads": row.get("sg_downloads") or "0",
+                "Inclusion Reason": game_layer_reason(row, enriched),
+                "Game Title": title,
+                "English Display Title": title,
+                "Original Title": row.get("unified_name") or row.get("pc_title") or title,
+                "Detected Language": "",
+                "Machine English Title": "",
+                "Manual English Title": "",
+                "Translation Source": "",
+                "Translation Confidence": "",
+                "Translation Review Status": "",
+                "Translation Note": "",
+                "Platform": game_layer_platform(row, enriched),
+                "Publisher": publisher,
+                "Release Date": release_date,
+                "Genre": "",
+                "Top 3 Markets": top_markets_text(row),
+                "SG App Store Ranks": sg_ranks_text(row),
+                "unified_app_id": row.get("unified_id") or row.get("steam_app_id") or normalized_key(title),
+                "run_timestamp_utc": "",
+                "report_start_date": row.get("report_start_date", ""),
+                "report_end_date": row.get("report_end_date", ""),
+                "ranking_date": row.get("ranking_date", ""),
+                "sensor_tower_effective_end_date": row.get("sensor_tower_effective_end_date", ""),
+                "meeting_date": meeting_date,
+                "report_classification": row.get("report_classification", ""),
+                "steamdb_peak": row.get("steamdb_peak", ""),
+                "steamdb_reviews": row.get("steamdb_reviews", ""),
+                "steam_url": row.get("steam_url", ""),
+                "release_date_source_url": enriched.get("release_date_source_url", ""),
+                "source_urls": enriched.get("source_urls", ""),
+            }
+        )
+    return report_rows
+
+
+def source_report_rows(metadata, schedule):
+    meeting_date = meeting_date_from_schedule(schedule)
+    if meeting_date:
+        rows = game_layer_report_rows(meeting_date)
+        if rows:
+            return rows
+    return read_csv(source_finalized_csv(metadata))
 
 
 def split_values(value):
@@ -234,6 +381,9 @@ def report_period(rows, schedule):
 
 def meeting_date_for(rows, schedule):
     if rows:
+        row_meeting = display_date(rows[0].get("meeting_date", ""))
+        if row_meeting:
+            return row_meeting
         end = parse_date(rows[0].get("report_end_date", ""))
         if end:
             return display_date((end + timedelta(days=1)).isoformat())
@@ -242,6 +392,9 @@ def meeting_date_for(rows, schedule):
 
 def meeting_date_key(rows, schedule):
     if rows:
+        row_meeting = parse_date(rows[0].get("meeting_date", ""))
+        if row_meeting:
+            return row_meeting.isoformat()
         end = parse_date(rows[0].get("report_end_date", ""))
         if end:
             return (end + timedelta(days=1)).isoformat()
@@ -562,14 +715,16 @@ def news_context_card(row, label):
     url = row.get("url") or "#"
     matched_html = f'<p><b>Matched game:</b> {escape(matched)}</p>' if matched else ""
     link_html = f'<a href="{escape(url)}" target="_blank" rel="noopener">View source</a>' if url != "#" else ""
-    return f"""<article class="news-context-card">
-  <div class="meta-chip-row"><span class="metric-badge neutral">{escape(label)}</span><span class="metric-badge strong">Score {escape(str(score))}</span><span class="metric-badge neutral">{escape(event_date)}</span></div>
-  <h3>{escape(title)}</h3>
-  <p><b>Source:</b> {escape(source)}</p>
-  {matched_html}
-  <p>{escape(reason)}</p>
-  {link_html}
-</article>"""
+    parts = [
+        '<article class="news-context-card">',
+        f'  <div class="meta-chip-row"><span class="metric-badge neutral">{escape(label)}</span><span class="metric-badge strong">Score {escape(str(score))}</span><span class="metric-badge neutral">{escape(event_date)}</span></div>',
+        f"  <h3>{escape(title)}</h3>",
+        f"  <p><b>Source:</b> {escape(source)}</p>",
+    ]
+    if matched_html:
+        parts.append(f"  {matched_html}")
+    parts.extend([f"  <p>{escape(reason)}</p>", f"  {link_html}" if link_html else "", "</article>"])
+    return "\n".join(part for part in parts if part)
 
 
 def news_context_section(news_context):
@@ -646,11 +801,17 @@ def write_text(path, text):
     path.write_text(text, encoding="utf-8")
 
 
-def same_path(left, right):
-    try:
-        return left.resolve() == right.resolve()
-    except OSError:
-        return left.absolute() == right.absolute()
+def write_rows_csv(path, rows):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields = []
+    for row in rows:
+        for key in row.keys():
+            if key not in fields:
+                fields.append(key)
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def write_data(rows, metadata, schedule, weekly_summary=None, news_context=None):
@@ -664,10 +825,8 @@ def write_data(rows, metadata, schedule, weekly_summary=None, news_context=None)
         ),
     )
     write_text(DOCS_WEEKLY_STAGING_JSON, json.dumps(weekly_staging_payload(weekly_summary or {}, schedule), ensure_ascii=False, indent=2))
-    source = source_finalized_csv(metadata)
     destination = DATA / "final_sg_market_scan_current_workflow.csv"
-    if source.exists() and not same_path(source, destination):
-        shutil.copy2(source, destination)
+    write_rows_csv(destination, rows)
 
 
 def write_assets():
@@ -849,11 +1008,18 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
     )
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Export the static IBD dashboard.")
+    parser.add_argument("--meeting-date", help="Use a specific meeting_pack date, for example 2026-08-04.")
+    args = parser.parse_args(argv)
+
     weekly_summary = source_weekly_summary()
     metadata = source_metadata()
-    rows = read_csv(source_finalized_csv(metadata))
     schedule = read_json(SCHEDULE, {})
+    if args.meeting_date:
+        schedule = dict(schedule)
+        schedule["upcoming_meeting_date"] = args.meeting_date
+    rows = source_report_rows(metadata, schedule)
     news_context = source_news_context(rows, schedule)
     DOCS.mkdir(parents=True, exist_ok=True)
     write_assets()
