@@ -971,6 +971,7 @@ def proof_run_records():
                 "data_as_of": data_as_of(proof_metadata, proof_rows),
                 "row_count": len(proof_rows),
                 "news_count": len(payload.get("news_context") or []),
+                "meeting_key": folder.name,
             }
         )
     return records
@@ -1005,11 +1006,22 @@ def historical_page(rows, schedule, metadata, weekly_summary=None):
     in_progress_start, in_progress_end = in_progress_period(schedule)
     staging_note = staging_summary_text(weekly_summary or {})
     proof_records = proof_run_records()
-    archive_cards = proof_archive_cards(proof_records)
+    latest_proof = proof_records[0] if proof_records else None
+    historical_records = proof_records[1:] if len(proof_records) > 1 else []
+    archive_cards = proof_archive_cards(historical_records)
+    latest_callout = ""
+    if latest_proof:
+        latest_callout = (
+            f'<section class="latest-archive-callout"><div><span class="status-chip strong">Current latest brief</span>'
+            f'<h2>{escape(latest_proof["meeting"])} latest report</h2>'
+            f'<p>{escape(latest_proof["period"])} &middot; Data as of: {escape(latest_proof["data_as_of"])}</p></div>'
+            f'<a class="btn primary" href="latest-brief.html">Open latest brief</a></section>'
+        )
     body = (
-        page_header("Historical Briefs", "Brief archive", "Open past market briefs by reporting period.")
+        page_header("Historical Briefs", "Brief archive", "Open past market briefs by reporting period. The current latest brief stays separate.")
+        + latest_callout
         + '<section class="archive-toolbar"><a class="btn primary" href="latest-brief.html">Latest</a><input type="search" id="archiveSearch" placeholder="Search briefs"></section>'
-        + f'<div class="combined-archive-grid"><section><h2>Proof reports</h2><div class="archive-grid">{archive_cards}</div></section>'
+        + f'<div class="combined-archive-grid"><section><h2>Historical reports</h2><div class="archive-grid">{archive_cards}</div></section>'
         + f'<aside class="combined-timeline"><h2>Upcoming / In progress</h2><div class="timeline-list compact"><article class="timeline-item"><div class="timeline-date"><span>Next meeting</span><b>{escape(display_date(schedule.get("upcoming_meeting_date", "")) or "N/A")}</b></div><div class="timeline-detail"><h3>{escape(in_progress_start or "N/A")} to {escape(in_progress_end or "N/A")}</h3><p>{escape(staging_note)}</p></div></article></div></aside></div>'
     )
     return page_shell("Historical Briefs", "historical", body, rows, schedule, metadata)
@@ -1182,6 +1194,9 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 .released-table .market-row{grid-template-columns:30px 30px minmax(68px,1fr) minmax(76px,1fr)!important}
 .archive-toolbar,.tracker-filters{display:flex!important;align-items:end!important;gap:10px!important;flex-wrap:wrap!important;border-radius:14px!important;padding:12px!important;margin-bottom:16px!important}
 .tracker-filters input,.tracker-filters select,.archive-toolbar input{min-width:min(280px,100%)!important}
+.latest-archive-callout{display:flex!important;justify-content:space-between!important;align-items:center!important;gap:16px!important;background:#fff!important;border:1px solid var(--line)!important;border-left:5px solid var(--magenta)!important;border-radius:16px!important;padding:18px!important;box-shadow:var(--shadow)!important;margin:0 0 16px!important}
+.latest-archive-callout h2{margin:8px 0 4px!important;color:var(--blue-900)!important;font-size:22px!important;line-height:1.2!important}
+.latest-archive-callout p{margin:0!important;color:var(--muted)!important;line-height:1.4!important}
 .combined-archive-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(280px,360px)!important;gap:16px!important;align-items:start!important}
 .archive-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))!important;gap:14px!important}
 .archive-card{border-radius:15px!important;padding:18px!important;min-width:0!important}
@@ -1217,6 +1232,7 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
   .slim-context-bar,.compact-topbar{position:relative!important;top:auto!important;display:grid!important;grid-template-columns:1fr!important}
   .inline-context{display:block!important}
   .inline-context b,.inline-context span{display:inline!important;white-space:normal!important}
+  .latest-archive-callout{display:grid!important;grid-template-columns:1fr!important}
   .compact-actions{display:grid!important;grid-template-columns:1fr 1fr!important;width:100%!important}
   main#main-content{padding:14px!important}
   .page-header{display:block!important}

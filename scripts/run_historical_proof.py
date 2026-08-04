@@ -1,4 +1,6 @@
 import argparse
+import json
+import re
 import shutil
 import subprocess
 import sys
@@ -24,28 +26,83 @@ def run_step(label, script, *args):
     subprocess.run(command, cwd=ROOT, check=True)
 
 
+def display_date(value):
+    try:
+        return date.fromisoformat(str(value)[:10]).strftime("%d %b %Y")
+    except ValueError:
+        return str(value or "N/A")
+
+
+def latest_meeting_date(current_meeting_date):
+    candidates = [current_meeting_date]
+    if PROOF_ROOT.exists():
+        for folder in PROOF_ROOT.iterdir():
+            if folder.is_dir():
+                try:
+                    date.fromisoformat(folder.name)
+                except ValueError:
+                    continue
+                candidates.append(folder.name)
+    return max(candidates)
+
+
+def rewrite_proof_html(path, meeting_date, latest_date):
+    payload_path = path.parent / "final-report.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    rows = payload.get("rows") or []
+    first = rows[0] if rows else {}
+    period = f'{display_date(first.get("report_start_date"))} to {display_date(first.get("report_end_date"))}'
+    meeting = display_date(first.get("meeting_date") or meeting_date)
+    data_as_of = display_date((payload.get("metadata") or {}).get("sensor_tower_data_as_of_date") or first.get("report_end_date"))
+    latest = display_date(latest_date)
+
+    html = path.read_text(encoding="utf-8")
+    html = html.replace("<title>Latest Brief | IBD Market Intelligence</title>", "<title>Historical Brief | IBD Market Intelligence</title>")
+    html = html.replace('href="assets/static-dashboard.css"', 'href="../../assets/static-dashboard.css"')
+    html = html.replace('src="assets/static-dashboard.js"', 'src="../../assets/static-dashboard.js"')
+    html = re.sub(
+        r'<nav class="top-nav" aria-label="Primary navigation">.*?</nav>',
+        '<nav class="top-nav" aria-label="Primary navigation"><a class="" href="../../latest-brief.html" data-tooltip="Read the current executive market update." aria-current="false">Latest Brief</a><a class="on" href="../../historical-briefs.html" data-tooltip="Open past briefs and review meeting schedule." aria-current="page">Brief Archive</a><a class="" href="../../game-tracker.html" data-tooltip="Filter games mentioned across briefs." aria-current="false">Game Tracker</a></nav>',
+        html,
+        flags=re.S,
+    )
+    html = re.sub(
+        r'<div class="inline-context">\s*<b>Latest Brief</b>\s*<span>Period: .*?</span>\s*<span>Meeting: .*?</span>\s*<span>Data as of: .*?</span>\s*</div>',
+        f'<div class="inline-context">\n          <b>Historical Brief</b>\n          <span>Historical period: {period}</span>\n          <span>Historical meeting: {meeting}</span>\n          <span>Historical data as of: {data_as_of}</span>\n          <span>Latest brief: {latest}</span>\n        </div>',
+        html,
+        flags=re.S,
+    )
+    html = re.sub(
+        r'<div><em>Market Brief</em><h1>Singapore Gaming Market</h1><p>Executive view of the latest Singapore market scan\.</p></div>',
+        f'<div><em>Historical Brief</em><h1>Singapore Gaming Market</h1><p>Archived final-report view for {period}. Current latest brief remains separate.</p></div>',
+        html,
+    )
+    html = html.replace('href="historical-briefs.html"', 'href="../../historical-briefs.html"')
+    html = html.replace('href="game-tracker.html"', 'href="../../game-tracker.html"')
+    html = html.replace('href="latest-brief.html"', 'href="../../latest-brief.html"')
+    html = html.replace('href="index.html"', 'href="../../latest-brief.html"')
+    html = html.replace('href="../../latest-brief.html" aria-current="true">Card view', 'href="./latest-brief.html" aria-current="true">Card view')
+    html = html.replace('href="latest-brief.html?view=table"', 'href="./latest-brief.html?view=table"')
+    html = html.replace('href="../../latest-brief.html?view=table"', 'href="./latest-brief.html?view=table"')
+    path.write_text(html, encoding="utf-8")
+
+
 def copy_outputs(meeting_date):
     destination = PROOF_ROOT / meeting_date
     destination.mkdir(parents=True, exist_ok=True)
+    latest_date = latest_meeting_date(meeting_date)
     copies = {
-        DOCS / "latest-brief.html": destination / "latest-brief.html",
-        DOCS / "index.html": destination / "index.html",
         DOCS / "data" / "final-report.json": destination / "final-report.json",
         DOCS / "data" / "final_sg_market_scan_current_workflow.csv": destination / "final_sg_market_scan_current_workflow.csv",
+        DOCS / "latest-brief.html": destination / "latest-brief.html",
+        DOCS / "index.html": destination / "index.html",
     }
     for source, target in copies.items():
         if not source.exists():
             raise RuntimeError(f"Expected export output missing: {source}")
         shutil.copy2(source, target)
         if target.suffix == ".html":
-            html = target.read_text(encoding="utf-8")
-            html = html.replace('href="assets/static-dashboard.css"', 'href="../../assets/static-dashboard.css"')
-            html = html.replace('src="assets/static-dashboard.js"', 'src="../../assets/static-dashboard.js"')
-            html = html.replace('href="latest-brief.html"', 'href="./latest-brief.html"')
-            html = html.replace('href="index.html"', 'href="./index.html"')
-            html = html.replace('href="historical-briefs.html"', 'href="../../historical-briefs.html"')
-            html = html.replace('href="game-tracker.html"', 'href="../../game-tracker.html"')
-            target.write_text(html, encoding="utf-8")
+            rewrite_proof_html(target, meeting_date, latest_date)
     print(f"Copied proof outputs to {destination}")
 
 
