@@ -16,6 +16,8 @@ GAME_REPORT_FIELDS = [
     "unified_publisher_name",
     "sg_downloads",
     "sg_revenue_gross",
+    "sg_revenue_prior_store",
+    "chart_rank_match_status",
     "ios_top_free_rank",
     "ios_top_grossing_rank",
     "android_top_free_rank",
@@ -37,6 +39,7 @@ GAME_ENRICHED_FIELDS = [
     "release_date_used",
     "developer",
     "publisher",
+    "genre",
     "platforms_confirmed",
     "summary_sentence_1",
     "summary_sentence_2",
@@ -137,9 +140,49 @@ def main():
                         "pc_title": "Hololive Dreams",
                         "steam_app_id": "100",
                         "steam_url": "https://store.steampowered.com/app/100",
-                        "pc_release_date": "2026-07-09",
+                        "pc_release_date": "2026-07-23",
                         "steamdb_peak": "16791",
                         "steamdb_reviews": "1000",
+                    },
+                    {
+                        "report_classification": "mobile_only",
+                        "meeting_date": "2026-08-04",
+                        "report_start_date": "2026-07-21",
+                        "report_end_date": "2026-08-01",
+                        "unified_name": "Old Revenue Game",
+                        "english_report_name": "Old Revenue Game",
+                        "unified_id": "old",
+                        "unified_publisher_name": "Old Publisher",
+                        "sg_downloads": "1000",
+                        "sg_revenue_gross": "1500",
+                        "sg_revenue_prior_store": "100",
+                        "chart_rank_match_status": "matched",
+                        "ios_top_free_rank": "100",
+                        "ios_top_grossing_rank": "",
+                        "android_top_free_rank": "90",
+                        "android_top_grossing_rank": "",
+                        "sg_release_date_reference": "2026/06/16",
+                        "sea_market_1_country": "SG",
+                        "sea_market_1_downloads": "1000",
+                        "sea_market_1_revenue_gross": "1500",
+                    },
+                    {
+                        "report_classification": "mobile_only",
+                        "meeting_date": "2026-08-04",
+                        "report_start_date": "2026-07-21",
+                        "report_end_date": "2026-08-01",
+                        "unified_name": "Star Sailors",
+                        "english_report_name": "Star Sailors",
+                        "unified_id": "star-sailors",
+                        "unified_publisher_name": "Com2uS Holdings",
+                        "sg_downloads": "2536",
+                        "sg_revenue_gross": "13495.77",
+                        "sg_revenue_prior_store": "0",
+                        "chart_rank_match_status": "matched",
+                        "sg_release_date_reference": "2026/02/19",
+                        "sea_market_1_country": "SG",
+                        "sea_market_1_downloads": "2536",
+                        "sea_market_1_revenue_gross": "13495.77",
                     },
                     {
                         "report_classification": "pc_only",
@@ -153,6 +196,17 @@ def main():
                         "steamdb_peak": "26028",
                         "steamdb_reviews": "500",
                     },
+                    {
+                        "report_classification": "pc_only",
+                        "meeting_date": "2026-08-04",
+                        "report_start_date": "2026-07-21",
+                        "report_end_date": "2026-08-01",
+                        "pc_title": "Future PC Game",
+                        "steam_app_id": "201",
+                        "pc_release_date": "2026-08-10",
+                        "steamdb_peak": "30000",
+                        "steamdb_reviews": "600",
+                    },
                 ],
                 GAME_REPORT_FIELDS,
             )
@@ -161,9 +215,10 @@ def main():
                 [
                     {
                         "report_name": "Hololive Dreams",
-                        "release_date_used": "2026-07-09",
+                        "release_date_used": "2026-07-23",
                         "developer": "Test Dev",
                         "publisher": "CyberAgent",
+                        "genre": "Rhythm RPG",
                         "platforms_confirmed": "Mobile + PC",
                         "summary_sentence_1": "Hololive Dreams is a mobile-led cross-platform game.",
                         "summary_sentence_2": "The title has SG revenue and matching PC evidence.",
@@ -191,7 +246,23 @@ def main():
                         "final_report_section": "Game Announcements",
                         "editor_decision": "include",
                         "editor_note": "Reviewed announcement note.",
-                    }
+                    },
+                    {
+                        "meeting_date": "2026-08-04",
+                        "report_start_date": "2026-07-21",
+                        "report_end_date": "2026-08-01",
+                        "context_type": "high_score_game_announcement",
+                        "event_date": "2026-08-02",
+                        "hot_score": "90",
+                        "source": "Pocket Tactics",
+                        "title": "Out-of-period announcement",
+                        "title_en": "Out-of-period announcement",
+                        "url": "https://example.com/out-of-period",
+                        "include_in_final_report": "yes",
+                        "final_report_section": "Game Announcements",
+                        "editor_decision": "include",
+                        "editor_note": "Should be filtered by event date.",
+                    },
                 ],
                 NEWS_FIELDS,
             )
@@ -222,11 +293,54 @@ def main():
             assert_true("Meeting: 04 Aug 2026" in latest_html, "meeting date should come from game layer")
             assert_true("Hololive Dreams" in latest_html, "game layer mobile row should render")
             assert_true("Pass the Fear" in latest_html, "game layer PC row should render")
+            assert_true("Future PC Game" not in latest_html, "PC-only releases outside the period should not render")
+            assert_true("Old Revenue Game" not in latest_html, "old revenue-active game should not render in final report")
+            assert_true("Star Sailors" in latest_html, "zero-prior-revenue commercial signal should render despite old Sensor Tower date")
+            assert_true("prior revenue was $0" in latest_html, "commercial-signal inclusion reason should be clear")
+            assert_true("Mobile Games" in latest_html, "mobile release group should render")
+            assert_true("Mobile + PC Games" in latest_html, "mobile plus PC release group should render")
+            assert_true("PC-only Games" in latest_html, "PC-only release group should render")
+            mobile_group_start = latest_html.index("<h3 class=\"signal-heading\">Mobile Games")
+            mobile_pc_group_start = latest_html.index("<h3 class=\"signal-heading\">Mobile + PC Games")
+            mobile_group_html = latest_html[mobile_group_start:mobile_pc_group_start]
+            assert_true("data-table" not in mobile_group_html, "empty release groups should not show irrelevant tables")
+            assert_true("Mobile-led game with PC version" in latest_html, "cross-platform classification should be visible")
+            assert_true("Mobile game" in latest_html, "mobile classification should be visible")
+            assert_true("PC-only game" in latest_html, "PC-only classification should be visible")
             assert_true("Hololive Dreams is a mobile-led cross-platform game." in latest_html, "enrichment summary should render")
+            assert_true("Rhythm RPG" in latest_html, "enrichment genre should render")
             assert_true("Reviewed announcement note." in latest_html, "reviewed news note should render")
-            assert_true(len(payload["rows"]) == 2, "final JSON should use game layer rows")
+            assert_true("Out-of-period announcement" not in latest_html, "out-of-period news should not render")
+            card_starts = []
+            cursor = 0
+            marker = '<article class="signal-card'
+            while True:
+                start = latest_html.find(marker, cursor)
+                if start < 0:
+                    break
+                card_starts.append(start)
+                cursor = start + len(marker)
+            cards = [latest_html[start : latest_html.index("</article>", start)] for start in card_starts]
+            mobile_card = next(card for card in cards if "Hololive Dreams" in card)
+            pc_card = next(card for card in cards if "Pass the Fear" in card)
+            assert_true("SG Performance" in mobile_card, "mobile games should show SG performance")
+            assert_true("PC Context" in mobile_card, "mobile plus PC games should show PC context")
+            assert_true("PC Context" in pc_card, "PC-only games should show PC context")
+            assert_true("SG Performance" not in pc_card, "PC-only games should not show SG performance")
+            assert_true("Top Markets" not in pc_card, "PC-only games should not show SEA market cards")
+            assert_true("Ranks" not in pc_card, "PC-only games should not show app store ranks")
+            assert_true("$0" not in pc_card and ">0<" not in pc_card and ">N/A<" not in pc_card, "PC-only cards should not show mobile placeholder stats")
+            assert_true("Watchlist focus" not in latest_html and "monitoring item" not in latest_html, "monitoring summary should be absent")
+            pc_payload = next(row for row in payload["rows"] if row["Game Title"] == "Pass the Fear")
+            pc_export = next(row for row in exported_rows if row["Game Title"] == "Pass the Fear")
+            for pc_row in (pc_payload, pc_export):
+                assert_true(pc_row["SG Gross Revenue"] == "", "PC-only rows should not export SG revenue")
+                assert_true(pc_row["SG Downloads"] == "", "PC-only rows should not export SG downloads")
+                assert_true(pc_row["Top 3 Markets"] == "", "PC-only rows should not export SEA markets")
+                assert_true(pc_row["SG App Store Ranks"] == "", "PC-only rows should not export app store ranks")
+            assert_true(len(payload["rows"]) == 3, "final JSON should use qualifying game layer rows")
             assert_true(len(payload["news_context"]) == 1, "final JSON should use reviewed news rows")
-            assert_true(len(exported_rows) == 2, "final CSV export should match game layer rows")
+            assert_true(len(exported_rows) == 3, "final CSV export should match qualifying game layer rows")
     finally:
         exporter.DOCS = originals["docs"]
         exporter.ASSETS = originals["assets"]

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IBD Game Scan POC Workflow Brief</title>
+  <style>
+    :root{font-family:Arial,Helvetica,sans-serif;color:#14213d;background:#f7f8f4}
+    body{margin:0;padding:32px}
+    main{max-width:1180px;margin:0 auto}
+    h1{font-size:36px;margin:0 0 8px}
+    h2{margin:28px 0 12px}
+    p{font-size:17px;line-height:1.45;color:#48556a}
+    .panel{background:white;border:1px solid #d9dfec;border-radius:12px;padding:20px;margin:16px 0}
+    .flow{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:12px}
+    .step{background:white;border:1px solid #d9dfec;border-top:6px solid #0f766e;border-radius:10px;padding:14px}
+    .step strong{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:#eef2ff;margin-bottom:8px}
+    .step h3{margin:4px 0 8px;font-size:18px}
+    .tag{display:inline-block;border-radius:999px;padding:5px 10px;background:#eef2ff;color:#27346b;font-weight:700;font-size:13px}
+    table{width:100%;border-collapse:collapse;background:white;border:1px solid #d9dfec;border-radius:10px;overflow:hidden}
+    th,td{text-align:left;border-bottom:1px solid #e5e9f2;padding:12px;vertical-align:top}
+    th{background:#f0f3f8;color:#24324d}
+    a{color:#5b21e6;font-weight:700}
+    ul{line-height:1.5}
+    @media(max-width:900px){.flow{grid-template-columns:1fr 1fr}body{padding:18px}}
+    @media(max-width:620px){.flow{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <p class="tag">Proof of Concept</p>
+  <h1>IBD Game Scan: End-to-End Workflow</h1>
+  <p>This version proves that Shauna can download market data, run the same pipeline across multiple reporting periods, and produce meeting-ready game launch briefs with mobile-first logic plus curated news context.</p>
+
+  <section class="panel">
+    <h2>What This Proves</h2>
+    <p>The system is not hardcoded to one week. Different Sensor Tower, SteamDB, and Game News Radar inputs produce different report outputs while applying the same rules: released games must fall inside the report period, news must be posted inside the report period, and PC-only games do not show fake SG mobile performance.</p>
+  </section>
+
+  <h2>Workflow Layers</h2>
+  <section class="flow">
+    <article class="step"><strong>1</strong><h3>Mobile Discovery</h3><p>Manual input: Shauna downloads Sensor Tower revenue and SG chart exports. The script finds mobile games with SG/SEA revenue and rank evidence.</p></article>
+    <article class="step"><strong>2</strong><h3>PC Discovery</h3><p>Manual input: Shauna saves SteamDB release pages. The script finds strong PC releases and checks mobile candidates for PC equivalents.</p></article>
+    <article class="step"><strong>3</strong><h3>Game Layer</h3><p>The system combines mobile and PC evidence into one game-level layer: mobile-only, mobile-led with PC version, or PC-only.</p></article>
+    <article class="step"><strong>4</strong><h3>Enrichment</h3><p>Shauna/Codex adds researched genre, publisher/developer, platforms, release date, and two-sentence game summary for report-facing titles.</p></article>
+    <article class="step"><strong>5</strong><h3>News Context</h3><p>Game News Radar provides wide-net story candidates. Only reviewed, high-score, in-period announcements enter the final brief.</p></article>
+    <article class="step"><strong>6</strong><h3>Final Brief</h3><p>The static report separates Mobile Games, Mobile + PC Games, and PC-only Games, then exports HTML, JSON, and CSV.</p></article>
+  </section>
+
+  <h2>Proof Runs</h2>
+  <table>
+    <thead><tr><th>Meeting Date</th><th>Report Output</th><th>What It Demonstrates</th><th>Open</th></tr></thead>
+    <tbody>
+      <tr><td>2026-07-07</td><td>5 mobile games, 0 news items</td><td>Mobile titles can enter through first-commercial-signal logic when prior revenue was $0 and current SG revenue crosses threshold, even if Sensor Tower release date looks old.</td><td><a href="2026-07-07/latest-brief.html">Open brief</a></td></tr>
+      <tr><td>2026-07-21</td><td>1 mobile game, 3 PC-only games, 1 reviewed news item</td><td>Exact 7 Jul to 20 Jul SteamDB export; mobile and PC-only games are separated, with Steam context only for PC-only games.</td><td><a href="2026-07-21/latest-brief.html">Open brief</a></td></tr>
+      <tr><td>2026-08-04</td><td>3 mobile games, 1 mobile + PC game, 3 PC-only games, 1 reviewed news item</td><td>The same pipeline handles mixed mobile, cross-platform, and PC-only outputs.</td><td><a href="2026-08-04/latest-brief.html">Open brief</a></td></tr>
+    </tbody>
+  </table>
+
+  <section class="panel">
+    <h2>Manual Work vs Automation</h2>
+    <ul>
+      <li><b>Manual:</b> download Sensor Tower exports, save SteamDB pages, review final news candidates, and add researched enrichment for report-facing titles.</li>
+      <li><b>Automated:</b> parse inputs, rank/filter candidates, merge mobile/PC evidence, enforce report-period rules, generate final HTML/JSON/CSV.</li>
+      <li><b>Still to automate:</b> enrichment queue and a real archive page that lists proof/final briefs automatically. Historical run packaging is now available through <code>scripts/run_historical_proof.py</code>.</li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <h2>Next Engineering Step</h2>
+    <p>Use <code>scripts/run_historical_proof.py</code> to choose a meeting date, run all layers, validate outputs, and save the result into a historical brief folder without overwriting the latest report.</p>
+  </section>
+</main>
+</body>
+</html>

@@ -97,7 +97,7 @@ def parse_date(value):
     if not value:
         return None
     text = str(value).strip()
-    for fmt in ("%Y-%m-%d", "%d-%b-%Y", "%d %b %Y"):
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%b-%Y", "%d %b %Y"):
         try:
             return datetime.strptime(text[:11], fmt).date()
         except ValueError:
@@ -151,6 +151,50 @@ def game_enriched_path(meeting_date):
     return meeting_pack_dir(meeting_date) / GAME_ENRICHED_FILENAME
 
 
+def parse_source_period(value):
+    match = re.search(r"\b(20\d{2}[-/]\d{2}[-/]\d{2}) to (20\d{2}[-/]\d{2}[-/]\d{2})\b", str(value or ""))
+    if not match:
+        return None, None
+    return parse_date(match.group(1)), parse_date(match.group(2))
+
+
+def release_inside_report_period(row, release_date):
+    released = parse_date(release_date)
+    if not released:
+        return False
+
+    start = parse_date(row.get("report_start_date", ""))
+    end = parse_date(row.get("report_end_date", ""))
+    if not start or not end:
+        start, end = parse_source_period(row.get("pc_source_period") or row.get("mobile_source_period"))
+    if not start or not end:
+        return False
+    return start <= released <= end
+
+
+def mobile_first_commercial_signal(row):
+    prior_text = str(row.get("sg_revenue_prior_store") or "").strip().replace(",", "").replace("$", "")
+    if not prior_text:
+        return False
+    try:
+        prior_revenue = float(prior_text)
+    except ValueError:
+        return False
+    if prior_revenue != 0:
+        return False
+    current_revenue = safe_float(row.get("sg_revenue_gross"))
+    return current_revenue >= 3000 or (
+        str(row.get("chart_rank_match_status") or "").strip().lower() == "matched"
+        and current_revenue >= 1000
+    )
+
+
+def release_or_first_signal_inside_report_period(row, release_date):
+    if row.get("report_classification") != "pc_only" and mobile_first_commercial_signal(row):
+        return True
+    return release_inside_report_period(row, release_date)
+
+
 def game_title(row):
     return row.get("english_report_name") or row.get("unified_name") or row.get("pc_title") or row.get("report_name") or "Untitled"
 
@@ -175,7 +219,21 @@ def game_layer_platform(row, enriched=None):
     return "Mobile"
 
 
+def report_classification_label(row):
+    labels = {
+        "mobile_only": "Mobile game",
+        "mobile_led_cross_platform": "Mobile-led game with PC version",
+        "pc_only": "PC-only game",
+    }
+    return labels.get(row.get("report_classification"), "Mobile game")
+
+
 def game_layer_reason(row, enriched=None):
+    if mobile_first_commercial_signal(row):
+        return (
+            "Included as a new SG commercial signal because prior revenue was $0 "
+            "and current SG revenue crossed the report threshold."
+        )
     if enriched:
         summary = " ".join(part for part in (enriched.get("summary_sentence_1"), enriched.get("summary_sentence_2")) if part)
         if summary:
@@ -222,13 +280,16 @@ def game_layer_report_rows(meeting_date):
             or row.get("pc_release_date")
             or ""
         )
+        if not release_or_first_signal_inside_report_period(row, release_date):
+            continue
         publisher = enriched.get("publisher") or row.get("unified_publisher_name") or "Publisher unavailable"
+        is_pc_only = row.get("report_classification") == "pc_only"
         report_rows.append(
             {
                 "Signal Type": game_layer_signal(row),
                 "Signal Definition": "Game-layer final report row.",
-                "SG Gross Revenue": row.get("sg_revenue_gross") or "0",
-                "SG Downloads": row.get("sg_downloads") or "0",
+                "SG Gross Revenue": "" if is_pc_only else row.get("sg_revenue_gross") or "0",
+                "SG Downloads": "" if is_pc_only else row.get("sg_downloads") or "0",
                 "Inclusion Reason": game_layer_reason(row, enriched),
                 "Game Title": title,
                 "English Display Title": title,
@@ -242,10 +303,11 @@ def game_layer_report_rows(meeting_date):
                 "Translation Note": "",
                 "Platform": game_layer_platform(row, enriched),
                 "Publisher": publisher,
+                "Developer": enriched.get("developer") or row.get("developer") or "",
                 "Release Date": release_date,
-                "Genre": "",
-                "Top 3 Markets": top_markets_text(row),
-                "SG App Store Ranks": sg_ranks_text(row),
+                "Genre": enriched.get("genre") or "",
+                "Top 3 Markets": "" if is_pc_only else top_markets_text(row),
+                "SG App Store Ranks": "" if is_pc_only else sg_ranks_text(row),
                 "unified_app_id": row.get("unified_id") or row.get("steam_app_id") or normalized_key(title),
                 "run_timestamp_utc": "",
                 "report_start_date": row.get("report_start_date", ""),
@@ -406,8 +468,21 @@ def source_news_context(rows, schedule):
     meeting_date = meeting_date_key(rows, schedule)
     if not meeting_date:
         return []
+    if not rows:
+        period_start, period_end, _ranking_date = schedule_report_dates(schedule)
+    else:
+        period_start = parse_date(rows[0].get("report_start_date", ""))
+        period_end = parse_date(rows[0].get("report_end_date", ""))
     review_rows = read_csv(MEETING_PACK_OUTPUT_ROOT / meeting_date / NEWS_CONTEXT_FILENAME)
-    return [row for row in review_rows if str(row.get("include_in_final_report") or "").strip().lower() == "yes"]
+    output = []
+    for row in review_rows:
+        if str(row.get("include_in_final_report") or "").strip().lower() != "yes":
+            continue
+        event_date = parse_date(row.get("event_date")) or parse_date(row.get("published_at"))
+        if period_start and period_end and (not event_date or not period_start <= event_date <= period_end):
+            continue
+        output.append(row)
+    return output
 
 
 def in_progress_period(schedule):
@@ -543,7 +618,6 @@ def summary_cards(rows):
         cards = [
             ("snapshot", "Current snapshot", "0 included launches", "No weekly candidates"),
             ("opportunity", "Top opportunity", "N/A", "No candidate met the extraction criteria"),
-            ("risk", "Watchlist focus", "0 monitoring item(s)", "Nothing new to review"),
             ("action", "SG gross revenue", "$0", "No candidate revenue in this window"),
         ]
         return '<section class="summary-card-grid">' + "".join(
@@ -557,7 +631,6 @@ def summary_cards(rows):
     cards = [
         ("snapshot", "Current snapshot", f"{len(rows)} included launches", f"{len(strong)} strong / {len(emerging)} emerging"),
         ("opportunity", "Top opportunity", title_for(leader) if leader else "No title available", money(leader.get("SG Gross Revenue")) if leader else "N/A"),
-        ("risk", "Watchlist focus", f"{len(emerging)} monitoring item(s)", "Review rank and revenue signals"),
         ("action", "SG gross revenue", money(total_revenue), "Estimated from available report output"),
     ]
     return '<section class="summary-card-grid">' + "".join(
@@ -582,7 +655,7 @@ def executive_summary(rows):
     leader = max(rows, key=lambda r: safe_float(r.get("SG Gross Revenue")), default={})
     bullets = [
         f"{len(rows)} released-game record(s) are included in the current market brief.",
-        f"{len(strong)} title(s) are classified as Strong Market Signals and {len(emerging)} remain in monitoring.",
+        f"{len(strong)} title(s) are classified as Strong Market Signals and {len(emerging)} are Emerging Market Signals.",
         f"{title_for(leader)} leads available SG revenue at {money(leader.get('SG Gross Revenue'))}." if leader else "No lead title is available in the current output.",
     ]
     return f"""<section class="brief-section executive-section">
@@ -592,11 +665,30 @@ def executive_summary(rows):
 
 
 def market_chips(row):
+    if row.get("report_classification") == "pc_only":
+        return pc_context_block(row)
+    pc_context = pc_context_block(row) if row.get("report_classification") == "mobile_led_cross_platform" else ""
+    pc_context_line = f"\n  {pc_context}" if pc_context else ""
     return f"""<div class="market-chip-row">
   <span class="market-chip sg-market"><small>SG Performance</small>{performance_block(row)}</span>
   <span class="market-chip structured-market-chip">{top_markets_block(row.get("Top 3 Markets"))}</span>
-  <span class="market-chip structured-market-chip">{ranks_block(row.get("SG App Store Ranks"))}</span>
+  <span class="market-chip structured-market-chip">{ranks_block(row.get("SG App Store Ranks"))}</span>{pc_context_line}
 </div>"""
+
+
+def pc_context_block(row):
+    stats = []
+    if row.get("steamdb_peak"):
+        stats.append(f'<div class="stat-cell"><span>Steam peak</span><b>{escape(number(row.get("steamdb_peak")))}</b></div>')
+    if row.get("steamdb_reviews"):
+        stats.append(f'<div class="stat-cell"><span>Steam reviews</span><b>{escape(number(row.get("steamdb_reviews")))}</b></div>')
+    if not stats:
+        stats.append('<div class="stat-cell"><span>Steam stats</span><b>Unavailable</b></div>')
+    steam_url = row.get("steam_url")
+    link = f'<a href="{escape(steam_url)}" target="_blank" rel="noopener">Steam store page</a>' if steam_url else ""
+    owners = " / ".join(value for value in (row.get("Publisher"), row.get("Developer")) if value)
+    owner_html = f'<p><b>Publisher / developer:</b> {escape(owners)}</p>' if owners else ""
+    return '<span class="market-chip structured-market-chip"><h5>PC Context</h5><div class="stat-grid pc-performance">' + "".join(stats) + f'</div>{owner_html}{link}</span>'
 
 
 def signal_card(row, group):
@@ -606,6 +698,7 @@ def signal_card(row, group):
     reason = row.get("Market Overview Reason") or row.get("Inclusion Reason") or row.get("Key Details") or "Available in current final report output."
     pill_class = "strong" if group == "strong" else "emerging"
     card_class = "rich-signal-card" if group == "strong" else "rich-signal-card emerging"
+    performance_heading = "PC Performance" if row.get("report_classification") == "pc_only" else "Local Performance"
     return f"""<article class="signal-card {card_class}">
   <div class="signal-card-top">
     <span class="signal-pill {pill_class}">{escape(signal_label(row))}</span>
@@ -617,11 +710,12 @@ def signal_card(row, group):
     <div class="meta-chip-row">
       {value_chips(row.get("Platform") or "Platform unavailable")}
       {value_chips(row.get("Genre") or "Genre unavailable")}
+      <span class="metric-badge neutral">{escape(report_classification_label(row))}</span>
       <span class="metric-badge neutral">Release {escape(display_date(row.get("Release Date")) or row.get("Release Date") or "N/A")}</span>
     </div>{title_note}
   </div>
   <div class="card-block">
-    <h4>Local Performance</h4>
+    <h4>{performance_heading}</h4>
     {market_chips(row)}
   </div>
   <div class="card-block card-evidence">
@@ -638,18 +732,20 @@ def empty_state(title, desc):
 def report_table(rows, released=False):
     fields = [
         "Game Title",
-        "English Display Title",
-        "Original Title",
         "Signal Type",
         "Publisher",
+        "Developer",
         "Platform",
         "Release Date",
         "Genre",
-        "SG Gross Revenue",
-        "SG Downloads",
-        "Top 3 Markets",
-        "SG App Store Ranks",
     ]
+    classification = rows[0].get("report_classification") if rows else ""
+    if classification == "pc_only":
+        fields += ["Steam Peak", "Steam Reviews", "Steam URL"]
+    else:
+        fields += ["SG Gross Revenue", "SG Downloads", "Top 3 Markets", "SG App Store Ranks"]
+        if classification == "mobile_led_cross_platform":
+            fields += ["Steam Peak", "Steam Reviews", "Steam URL"]
     head = "".join(f"<th>{escape(field)}</th>" for field in fields)
     body = "".join(
         "<tr>" + "".join(table_cell(row, field) for field in fields) + "</tr>"
@@ -677,6 +773,14 @@ def table_cell(row, field):
         return f"<td>{top_markets_block(value)}</td>"
     if field == "SG App Store Ranks":
         return f"<td>{ranks_block(value)}</td>"
+    if field == "Steam Peak":
+        return f'<td class="num">{escape(number(row.get("steamdb_peak")))}</td>'
+    if field == "Steam Reviews":
+        return f'<td class="num">{escape(number(row.get("steamdb_reviews")))}</td>'
+    if field == "Steam URL":
+        url = row.get("steam_url")
+        link = f'<a href="{escape(url)}" target="_blank" rel="noopener">Steam</a>' if url else ""
+        return f"<td>{link}</td>"
     if field == "Release Date":
         return f'<td><span class="metric-badge neutral">{escape(display_date(value) or str(value or ""))}</span></td>'
     return f"<td>{escape(str(value or ''))}</td>"
@@ -689,18 +793,34 @@ def released_games_section(strong, emerging, view):
   <a class="{active_cards}" href="latest-brief.html" aria-current="{"true" if view != "table" else "false"}">Card view</a>
   <a class="{active_table}" href="latest-brief.html?view=table" aria-current="{"true" if view == "table" else "false"}">Compact table</a>
 </div>"""
-    strong_html = "".join(signal_card(row, "strong") for row in strong) or empty_state("No Strong releases in this brief", "No released-game item currently exceeds the Strong signal threshold for Singapore.")
-    emerging_html = "".join(signal_card(row, "emerging") for row in emerging) or empty_state("No Emerging releases in this brief", "No Emerging released-game items are available for this reporting period.")
+    rows = strong + emerging
+    groups = [
+        ("mobile_only", "Mobile Games", "Mobile game", "No mobile-only games were released in this reporting period."),
+        ("mobile_led_cross_platform", "Mobile + PC Games", "Mobile-led game with PC version", "No mobile-led cross-platform games were released in this reporting period."),
+        ("pc_only", "PC-only Games", "PC-only game", "No PC-only games were released in this reporting period."),
+    ]
+    card_sections = []
+    table_sections = []
+    for classification, heading, label, empty_desc in groups:
+        group_rows = sorted(
+            [
+                row for row in rows
+                if row.get("report_classification") == classification
+                or (classification == "mobile_only" and not row.get("report_classification"))
+            ],
+            key=lambda row: (0 if signal_group(row) == "strong" else 1, title_for(row).lower()),
+        )
+        cards = "".join(signal_card(row, signal_group(row)) for row in group_rows) or empty_state(f"No {heading.lower()} in this brief", empty_desc)
+        card_sections.append(f'<section class="release-group"><h3 class="signal-heading">{heading} <span>{label}</span></h3><div class="signal-grid">{cards}</div></section>')
+        table_content = report_table(group_rows, released=True) if group_rows else empty_state(f"No {heading.lower()} in this brief", empty_desc)
+        table_sections.append(f'<section class="release-group"><h3 class="signal-heading">{heading} <span>{label}</span></h3>{table_content}</section>')
     return f"""<section class="brief-section released-games-section">
-  <div class="section-heading"><div><h2>SG Top Grossing Signals</h2><p>First-observed SG Top Grossing evidence with Sensor Tower-supported revenue, downloads, ranks, and SEA6 market context.</p></div>{toggle}</div>
+  <div class="section-heading"><div><h2>Released Games</h2><p>Games released inside the report period, grouped by mobile and PC classification.</p></div>{toggle}</div>
   <div class="cards-view" data-view="cards">
-    <h3 class="signal-heading strong-heading">Strong Market Signals <span>Commercial traction is already visible.</span></h3>
-    <div class="signal-grid strong-grid">{strong_html}</div>
-    <h3 class="signal-heading emerging-heading">Emerging Market Signals <span>New SG launches worth monitoring.</span></h3>
-    <div class="signal-grid emerging-grid">{emerging_html}</div>
+    {"".join(card_sections)}
   </div>
   <div class="table-view" data-view="table">
-    {report_table(strong + emerging, released=True)}
+    {"".join(table_sections)}
   </div>
 </section>"""
 
