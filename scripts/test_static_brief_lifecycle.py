@@ -272,6 +272,7 @@ def main():
         assert_true("Game News Context" in latest_html, "Latest brief should include the news context section.")
         assert_true("Future RPG release date announced" in latest_html, "Latest brief should show high-score announcements.")
         assert_true("Star Sailors launches worldwide" in latest_html, "Latest brief should show release-support news.")
+        assert_true("Fixture-approved context" in latest_html, "Latest brief should show reviewed editor notes.")
         assert_true("Staging Game" not in latest_html, "Weekly staging output must not replace Latest Brief.")
         assert_true("Current brief" not in archive_html, "Archive must not label staging as Current brief.")
         assert_true("No older finalized briefs yet." in archive_html, "Archive should show empty state without older briefs.")

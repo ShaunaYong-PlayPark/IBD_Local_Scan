@@ -558,7 +558,7 @@ def news_context_card(row, label):
     score = row.get("hot_score") or "0"
     event_date = display_date(row.get("event_date")) or display_date(row.get("published_at")) or "Date unavailable"
     matched = row.get("matched_report_game")
-    reason = row.get("inclusion_reason") or "Qualified through Game News Radar context rules."
+    reason = row.get("editor_note") or row.get("inclusion_reason") or "Qualified through Game News Radar context rules."
     url = row.get("url") or "#"
     matched_html = f'<p><b>Matched game:</b> {escape(matched)}</p>' if matched else ""
     link_html = f'<a href="{escape(url)}" target="_blank" rel="noopener">View source</a>' if url != "#" else ""
