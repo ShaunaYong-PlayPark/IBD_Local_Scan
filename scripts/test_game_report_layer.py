@@ -113,8 +113,10 @@ def pc_row(title, app_id, release_date, peak, main, appendix, reason, matched_mo
 def test_build_game_report_layer_classifications():
     tmp = temp_root()
     original_root = layer.MEETING_PACK_OUTPUT_ROOT
+    original_registry = layer.REGISTRY_PATH
     try:
         layer.MEETING_PACK_OUTPUT_ROOT = tmp / "meeting_pack"
+        layer.REGISTRY_PATH = tmp / "game_registry.csv"
         meeting_dir = layer.MEETING_PACK_OUTPUT_ROOT / "2026-07-28"
         write_csv(
             meeting_dir / "mobile_main_report.csv",
@@ -156,6 +158,7 @@ def test_build_game_report_layer_classifications():
         assert_true(all(row["pc_source_period"] == "2026-07-14 to 2026-07-27" for row in rows), "pc source period exists")
     finally:
         layer.MEETING_PACK_OUTPUT_ROOT = original_root
+        layer.REGISTRY_PATH = original_registry
 
 
 def test_mobile_appendix_rows_are_not_inputs_to_layer():
@@ -165,6 +168,7 @@ def test_mobile_appendix_rows_are_not_inputs_to_layer():
 def test_chart_backed_pc_match_promotes_ragnarok():
     tmp = temp_root()
     original_root = layer.MEETING_PACK_OUTPUT_ROOT
+    original_registry = layer.REGISTRY_PATH
     original_drop = layer.MEETING_DROP_ROOT
     try:
         layer.MEETING_PACK_OUTPUT_ROOT = tmp / "meeting_pack"
@@ -211,13 +215,86 @@ def test_chart_backed_pc_match_promotes_ragnarok():
         assert_equal(ragnarok[0]["chart_rank_match_status"], "matched", "Ragnarok chart match")
     finally:
         layer.MEETING_PACK_OUTPUT_ROOT = original_root
+        layer.REGISTRY_PATH = original_registry
         layer.MEETING_DROP_ROOT = original_drop
+
+
+def test_continuity_registry_is_exact_and_directional():
+    tmp = temp_root()
+    original_registry = layer.REGISTRY_PATH
+    try:
+        layer.REGISTRY_PATH = tmp / "game_registry.csv"
+        write_csv(
+            layer.REGISTRY_PATH,
+            [{
+                "registry_game_id": "game-ragnarok",
+                "original_title": "Ragnarok: The New World",
+                "english_title": "Ragnarok: The New World",
+                "normalized_original_title": "ragnarok the new world",
+                "normalized_english_title": "ragnarok the new world",
+                "first_seen_meeting_date": "2026-07-21",
+                "first_seen_report_period": "2026-07-07 to 2026-07-20",
+                "first_seen_platform_classification": "mobile_only",
+                "first_seen_brief_href": "proof-runs/2026-07-21/latest-brief.html",
+                "mobile_app_ids": "com.ggv.roworldsea.aos",
+                "steam_app_ids": "",
+                "known_platforms": "iOS, Android",
+                "publisher": "Gravity Game Vision",
+                "developer": "",
+                "notes": "",
+            }],
+            layer.REGISTRY_FIELDS,
+        )
+        current = layer.apply_continuity([{
+            "report_classification": "mobile_led_cross_platform",
+            "unified_name": "Ragnarok: The New World",
+            "english_report_name": "Ragnarok: The New World",
+            "unified_id": "com.ggv.roworldsea.aos",
+            "steam_app_id": "4212480",
+            "steam_url": "https://store.steampowered.com/app/4212480/",
+        }], "2026-08-04")[0]
+        assert_true("Mobile version was first covered in the 21 Jul 2026 brief." in current["continuity_note"], "mobile-first continuity note")
+        assert_equal(current["continuity_brief_href"], "proof-runs/2026-07-21/latest-brief.html", "continuity brief link")
+
+        layer.REGISTRY_PATH = tmp / "pc_registry.csv"
+        write_csv(
+            layer.REGISTRY_PATH,
+            [{
+                "registry_game_id": "game-pc",
+                "original_title": "PC Game",
+                "english_title": "PC Game",
+                "normalized_original_title": "pc game",
+                "normalized_english_title": "pc game",
+                "first_seen_meeting_date": "2026-07-21",
+                "first_seen_report_period": "2026-07-07 to 2026-07-20",
+                "first_seen_platform_classification": "pc_only",
+                "first_seen_brief_href": "proof-runs/2026-07-21/latest-brief.html",
+                "mobile_app_ids": "",
+                "steam_app_ids": "999",
+                "known_platforms": "PC, Steam",
+                "publisher": "PC Publisher",
+                "developer": "",
+                "notes": "",
+            }],
+            layer.REGISTRY_FIELDS,
+        )
+        pc_followup = layer.apply_continuity([{
+            "report_classification": "mobile_led_cross_platform",
+            "unified_name": "PC Game",
+            "english_report_name": "PC Game",
+            "unified_id": "mobile-app-1",
+        }], "2026-08-04")[0]
+        assert_true("PC version was first covered in the 21 Jul 2026 brief." in pc_followup["continuity_note"], "PC-first continuity note")
+        assert_true(layer.find_registry_match(layer.read_registry(), {"Game Title": "PC Games"}) is None, "fuzzy title is not auto-matched")
+    finally:
+        layer.REGISTRY_PATH = original_registry
 
 
 def main():
     test_build_game_report_layer_classifications()
     test_mobile_appendix_rows_are_not_inputs_to_layer()
     test_chart_backed_pc_match_promotes_ragnarok()
+    test_continuity_registry_is_exact_and_directional()
     print("GAME_REPORT_LAYER_TEST_PASS")
 
 

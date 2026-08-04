@@ -1,5 +1,7 @@
 import argparse
 import csv
+import hashlib
+import json
 import re
 import sys
 from pathlib import Path
@@ -10,6 +12,8 @@ import build_pc_steamdb_discovery_candidates as pc
 ROOT = Path(__file__).resolve().parents[1]
 MEETING_PACK_OUTPUT_ROOT = ROOT / "data" / "output" / "meeting_pack"
 MEETING_DROP_ROOT = ROOT / "data" / "input" / "meeting_drop"
+REGISTRY_PATH = ROOT / "data" / "reference" / "game_registry.csv"
+PROOF_RUNS_ROOT = ROOT / "docs" / "proof-runs"
 
 CLASS_MOBILE_LED_CROSS_PLATFORM = "mobile_led_cross_platform"
 CLASS_MOBILE_ONLY = "mobile_only"
@@ -30,6 +34,31 @@ LEADING_FIELDS = [
     "report_classification",
     "mobile_source_period",
     "pc_source_period",
+]
+
+CONTINUITY_FIELDS = [
+    "registry_game_id",
+    "continuity_note",
+    "continuity_brief_href",
+    "continuity_first_seen_meeting_date",
+]
+
+REGISTRY_FIELDS = [
+    "registry_game_id",
+    "original_title",
+    "english_title",
+    "normalized_original_title",
+    "normalized_english_title",
+    "first_seen_meeting_date",
+    "first_seen_report_period",
+    "first_seen_platform_classification",
+    "first_seen_brief_href",
+    "mobile_app_ids",
+    "steam_app_ids",
+    "known_platforms",
+    "publisher",
+    "developer",
+    "notes",
 ]
 
 
@@ -53,6 +82,198 @@ def write_csv(path, rows, fields):
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def read_registry(path=None):
+    path = Path(path or REGISTRY_PATH)
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def write_registry(path, rows):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=REGISTRY_FIELDS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def normalized_title(value):
+    return pc.normalize_title(value)
+
+
+def title_alias_keys(value):
+    key = normalized_title(value)
+    keys = {key} if key else set()
+    mapping_path = ROOT / "data" / "reference" / "master_title_mapping.csv"
+    if mapping_path.exists():
+        with mapping_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for alias in csv.DictReader(handle):
+                original = normalized_title(alias.get("original_title"))
+                english = normalized_title(alias.get("english_display_title"))
+                if key and key in {original, english}:
+                    keys.update(part for part in (original, english) if part)
+    return keys
+
+
+def split_ids(value):
+    return [part.strip() for part in str(value or "").split(";") if part.strip()]
+
+
+def steam_id_from_url(value):
+    match = re.search(r"/app/(\d+)", str(value or ""))
+    return match.group(1) if match else ""
+
+
+def registry_id(original_title, english_title):
+    key = normalized_title(english_title) or normalized_title(original_title)
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+    return f"game-{digest}"
+
+
+def proof_rows_before(meeting_date):
+    rows = []
+    if not PROOF_RUNS_ROOT.exists():
+        return rows
+    for folder in sorted(PROOF_RUNS_ROOT.iterdir()):
+        if not folder.is_dir() or folder.name >= meeting_date:
+            continue
+        path = folder / "final-report.json"
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        rows.extend((folder.name, row) for row in payload.get("rows") or [])
+    return rows
+
+
+def registry_record_from_row(row, meeting_date, brief_href=None):
+    original = row.get("Original Title") or row.get("unified_name") or row.get("pc_title") or row.get("Game Title") or ""
+    english = row.get("English Display Title") or row.get("english_report_name") or row.get("Game Title") or original
+    classification = row.get("report_classification") or CLASS_MOBILE_ONLY
+    default_platforms = {
+        CLASS_MOBILE_LED_CROSS_PLATFORM: "iOS, Android, Steam",
+        CLASS_MOBILE_ONLY: "iOS, Android",
+        CLASS_PC_ONLY: "PC, Steam",
+    }
+    mobile_ids = [] if classification == CLASS_PC_ONLY else split_ids(row.get("unified_app_id") or row.get("unified_id"))
+    steam_ids = split_ids(row.get("steam_app_id")) or [steam_id_from_url(row.get("steam_url"))]
+    steam_ids = [value for value in steam_ids if value]
+    return {
+        "registry_game_id": registry_id(original, english),
+        "original_title": original,
+        "english_title": english,
+        "normalized_original_title": normalized_title(original),
+        "normalized_english_title": normalized_title(english),
+        "first_seen_meeting_date": meeting_date,
+        "first_seen_report_period": date_period(row.get("report_start_date", ""), row.get("report_end_date", "")),
+        "first_seen_platform_classification": classification,
+        "first_seen_brief_href": brief_href or f"proof-runs/{meeting_date}/latest-brief.html",
+        "mobile_app_ids": ";".join(mobile_ids),
+        "steam_app_ids": ";".join(steam_ids),
+        "known_platforms": row.get("Platform") or row.get("platforms_confirmed") or default_platforms.get(classification, ""),
+        "publisher": row.get("Publisher") or row.get("unified_publisher_name") or "",
+        "developer": row.get("Developer") or row.get("developer") or "",
+        "notes": "",
+    }
+
+
+def seed_registry(meeting_date):
+    seeded = []
+    for first_seen_date, row in proof_rows_before(meeting_date):
+        candidate = registry_record_from_row(row, first_seen_date)
+        match = find_registry_match(seeded, row)
+        if match:
+            continue
+        seeded.append(candidate)
+    return seeded
+
+
+def find_registry_match(registry_rows, row):
+    row_keys = set()
+    for field in ("Original Title", "English Display Title", "unified_name", "english_report_name", "Game Title", "pc_title"):
+        row_keys.update(title_alias_keys(row.get(field)))
+    row_mobile_ids = set(split_ids(row.get("unified_app_id") or row.get("unified_id")))
+    row_steam_ids = set(split_ids(row.get("steam_app_id")))
+    steam_id = steam_id_from_url(row.get("steam_url"))
+    if steam_id:
+        row_steam_ids.add(steam_id)
+    for record in registry_rows:
+        record_keys = {
+            normalized_title(record.get("normalized_original_title")),
+            normalized_title(record.get("normalized_english_title")),
+        }
+        record_mobile_ids = set(split_ids(record.get("mobile_app_ids")))
+        record_steam_ids = set(split_ids(record.get("steam_app_ids")))
+        if row_keys & record_keys or row_mobile_ids & record_mobile_ids or row_steam_ids & record_steam_ids:
+            return record
+    return None
+
+
+def merge_registry_record(existing, current, row):
+    if existing is None:
+        return current
+    merged = dict(existing)
+    for field in ("mobile_app_ids", "steam_app_ids"):
+        values = set(split_ids(existing.get(field))) | set(split_ids(current.get(field)))
+        merged[field] = ";".join(sorted(value for value in values if value))
+    for field in ("known_platforms", "publisher", "developer"):
+        values = set(part.strip() for part in str(existing.get(field) or "").split(",") if part.strip())
+        values.update(part.strip() for part in str(current.get(field) or "").split(",") if part.strip())
+        merged[field] = ", ".join(sorted(values))
+    if not merged.get("original_title"):
+        merged["original_title"] = current.get("original_title", "")
+    if not merged.get("english_title"):
+        merged["english_title"] = current.get("english_title", "")
+    if not merged.get("notes"):
+        merged["notes"] = current.get("notes", "")
+    return merged
+
+
+def apply_continuity(rows, meeting_date):
+    registry_rows = read_registry()
+    if not registry_rows:
+        registry_rows = seed_registry(meeting_date)
+    output = []
+    for row in rows:
+        prior = find_registry_match(registry_rows, row)
+        row = dict(row)
+        row.update({field: "" for field in CONTINUITY_FIELDS})
+        current = registry_record_from_row(row, meeting_date)
+        if prior and prior.get("first_seen_meeting_date") != meeting_date:
+            first_date = prior.get("first_seen_meeting_date", "")
+            first_label = display_date_for_note(first_date)
+            current_class = row.get("report_classification")
+            prior_class = prior.get("first_seen_platform_classification")
+            if prior_class == CLASS_MOBILE_ONLY and current_class == CLASS_MOBILE_LED_CROSS_PLATFORM:
+                row["continuity_note"] = f"Mobile version was first covered in the {first_label} brief. This report adds the later Steam PC release."
+            elif prior_class == CLASS_PC_ONLY and current_class == CLASS_MOBILE_LED_CROSS_PLATFORM:
+                row["continuity_note"] = f"PC version was first covered in the {first_label} brief. This report adds the later mobile release/commercial signal."
+            if row.get("continuity_note"):
+                row["continuity_brief_href"] = prior.get("first_seen_brief_href", "")
+                row["continuity_first_seen_meeting_date"] = first_date
+                row["registry_game_id"] = prior.get("registry_game_id", "")
+        merged = merge_registry_record(prior, current, row)
+        if prior:
+            index = registry_rows.index(prior)
+            registry_rows[index] = merged
+        else:
+            registry_rows.append(merged)
+        output.append(row)
+    write_registry(REGISTRY_PATH, registry_rows)
+    return output
+
+
+def display_date_for_note(value):
+    try:
+        return pc.parse_date(value).strftime("%d %b %Y")
+    except (AttributeError, TypeError, ValueError):
+        return str(value or "")
 
 
 def mobile_main_report_path(meeting_date):
@@ -319,7 +540,9 @@ def build(meeting_date):
     pc_rows, _pc_fields = read_csv(pc_meeting_pack_path(meeting_date))
     mobile_rows = mobile_rows + chart_mobile_rows(meeting_date, mobile_fields, mobile_rows, pc_rows)
     rows = build_rows(mobile_rows, mobile_fields, pc_rows)
+    rows = apply_continuity(rows, meeting_date)
     fields = LEADING_FIELDS + mobile_fields + PC_LAYER_FIELDS
+    fields += [field for field in CONTINUITY_FIELDS if field not in fields]
     out = output_path(meeting_date)
     write_csv(out, rows, fields)
     return out, rows

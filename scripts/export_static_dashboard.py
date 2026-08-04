@@ -364,6 +364,9 @@ def game_layer_report_rows(meeting_date):
                 "steam_url": row.get("steam_url", ""),
                 "release_date_source_url": enriched.get("release_date_source_url", ""),
                 "source_urls": enriched.get("source_urls", ""),
+                "Continuity Note": enriched.get("continuity_note") or row.get("continuity_note", ""),
+                "Continuity Brief Href": enriched.get("continuity_brief_href") or row.get("continuity_brief_href", ""),
+                "registry_game_id": enriched.get("registry_game_id") or row.get("registry_game_id", ""),
             }
         )
     return report_rows
@@ -761,6 +764,12 @@ def signal_card(row, group):
     original = row.get("Original Title") or row.get("original_title") or ""
     title_note = f'\n    <p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
     details = row.get("Key Details") or row.get("Market Overview Reason") or row.get("Inclusion Reason") or "Available in current final report output."
+    continuity = row.get("Continuity Note") or ""
+    continuity_href = row.get("Continuity Brief Href") or ""
+    continuity_html = ""
+    if continuity:
+        link = f' <a href="{escape(continuity_href)}">Open earlier brief</a>' if continuity_href else ""
+        continuity_html = f'<div class="continuity-note"><b>Continuity</b><p>{escape(continuity)}{link}</p></div>'
     pill_class = "strong" if group == "strong" else "emerging"
     card_class = "rich-signal-card" if group == "strong" else "rich-signal-card emerging"
     performance_heading = "PC Performance" if row.get("report_classification") == "pc_only" else "Local Performance"
@@ -786,6 +795,7 @@ def signal_card(row, group):
   <div class="card-block card-evidence">
     <h4>Key Details</h4>
     <p>{escape(details)}</p>
+    {continuity_html}
   </div>
 </article>"""
 
@@ -811,6 +821,8 @@ def report_table(rows, released=False):
         fields += ["SG Gross Revenue", "SG Downloads", "Top 3 Markets", "SG App Store Ranks"]
         if classification == "mobile_led_cross_platform":
             fields += ["Steam Peak", "Steam Reviews", "Steam URL"]
+    if any(row.get("Continuity Note") for row in rows):
+        fields += ["Continuity"]
     head = "".join(f"<th>{escape(field)}</th>" for field in fields)
     body = "".join(
         "<tr>" + "".join(table_cell(row, field) for field in fields) + "</tr>"
@@ -837,6 +849,7 @@ def tracker_table(rows):
         "Steam Peak",
         "Steam Reviews",
         "Steam URL",
+        "Continuity",
         "Related Brief",
     ]
     head = "".join(f"<th>{escape(field)}</th>" for field in fields)
@@ -881,6 +894,12 @@ def table_cell(row, field):
         if href:
             return f'<td><a href="{escape(href)}">{escape(text)}</a></td>'
         return f"<td>{escape(str(text or ''))}</td>"
+    if field == "Continuity":
+        href = row.get("Continuity Brief Href", "")
+        if not value:
+            return "<td></td>"
+        link = f' <a href="{escape(href)}">Earlier brief</a>' if href else ""
+        return f"<td>{escape(str(value))}{link}</td>"
     return f"<td>{escape(str(value or ''))}</td>"
 
 
