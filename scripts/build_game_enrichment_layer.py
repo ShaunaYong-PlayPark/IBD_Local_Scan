@@ -69,6 +69,14 @@ SEARCH_ORDER_NOTE = [
     "english_report_name + publisher",
 ]
 
+PUBLIC_METADATA_OVERRIDES = {
+    "ragnarok the new world": {
+        "publisher": "GRAVITY",
+        "developer": "Gravity Game Vision",
+        "genre": "Open-world MMORPG / Role-playing",
+    },
+}
+
 
 def read_csv(path):
     with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
@@ -162,7 +170,7 @@ def base_enrichment_row(row):
     release_date, release_scope, release_source_url = release_fields(row)
     store_url = row.get("steam_url") if row.get("steam_url") else UNKNOWN
     source_urls = store_url if store_url != UNKNOWN else UNKNOWN
-    return {
+    result = {
         "report_name": name,
         "report_classification": classification,
         "mobile_source_period": row.get("mobile_source_period") or UNKNOWN,
@@ -187,6 +195,8 @@ def base_enrichment_row(row):
         "enrichment_status": "needs_research",
         "enrichment_notes": "Base row generated from game_report_layer.csv; unknown internet research fields left unconfirmed.",
     }
+    result.update(PUBLIC_METADATA_OVERRIDES.get(pc.normalize_title(name), {}))
+    return result
 
 
 def read_research_overlay(path):

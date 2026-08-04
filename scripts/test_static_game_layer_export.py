@@ -79,6 +79,12 @@ def assert_true(value, message):
 
 
 def main():
+    assert_true(
+        exporter.continuity_table_text(
+            "Mobile version was first covered in the 21 Jul 2026 brief. This report adds the later Steam PC release."
+        ) == "Mobile first covered in 21 Jul 2026 brief; later Steam PC release added here.",
+        "continuity table wording",
+    )
     originals = {
         "docs": exporter.DOCS,
         "assets": exporter.ASSETS,

@@ -306,6 +306,17 @@ def sg_ranks_text(row):
     return f"SG App Store Ranks: {ios} || {android}"
 
 
+def continuity_table_text(note):
+    text = str(note or "").strip()
+    if text.startswith("Mobile version was first covered in the ") and ". This report adds the later Steam PC release." in text:
+        date_text = text[len("Mobile version was first covered in the "):].split(" brief.", 1)[0]
+        return f"Mobile first covered in {date_text} brief; later Steam PC release added here."
+    if text.startswith("PC version was first covered in the ") and ". This report adds the later mobile release/commercial signal." in text:
+        date_text = text[len("PC version was first covered in the "):].split(" brief.", 1)[0]
+        return f"PC first covered in {date_text} brief; later mobile release/commercial signal added here."
+    return text
+
+
 def game_layer_report_rows(meeting_date):
     game_rows = read_csv(game_report_path(meeting_date))
     if not game_rows:
@@ -366,6 +377,7 @@ def game_layer_report_rows(meeting_date):
                 "source_urls": enriched.get("source_urls", ""),
                 "Continuity Note": enriched.get("continuity_note") or row.get("continuity_note", ""),
                 "Continuity Brief Href": enriched.get("continuity_brief_href") or row.get("continuity_brief_href", ""),
+                "Continuity": continuity_table_text(enriched.get("continuity_note") or row.get("continuity_note", "")),
                 "registry_game_id": enriched.get("registry_game_id") or row.get("registry_game_id", ""),
             }
         )

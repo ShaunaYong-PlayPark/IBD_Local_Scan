@@ -39,6 +39,7 @@
       "source_urls": "https://www.hololive-dreams.com/en/news/detail/aku8rsuo9 | https://hololive.hololivepro.com/en/news/20260723-01-401/ | https://play.google.com/store/apps/details?id=game.qualiarts.hololive.dreams.com | https://store.steampowered.com/app/4282500/",
       "Continuity Note": "",
       "Continuity Brief Href": "",
+      "Continuity": "",
       "registry_game_id": "unconfirmed"
     },
     {
@@ -80,6 +81,7 @@
       "source_urls": "https://play.google.com/store/apps/details?id=com.devsisters.cc | https://apps.apple.com/us/app/cookierun-crumble-idle-rpg/id6749251466 | https://game.devsisters.com/en/cookierun/",
       "Continuity Note": "",
       "Continuity Brief Href": "",
+      "Continuity": "",
       "registry_game_id": "unconfirmed"
     },
     {
@@ -121,6 +123,7 @@
       "source_urls": "https://play.google.com/store/apps/details?id=com.efun.aexkxxl.sea",
       "Continuity Note": "",
       "Continuity Brief Href": "",
+      "Continuity": "",
       "registry_game_id": "unconfirmed"
     },
     {
@@ -162,6 +165,7 @@
       "source_urls": "https://play.google.com/store/apps/details?id=com.s01.global | https://www.centurygames.com/",
       "Continuity Note": "",
       "Continuity Brief Href": "",
+      "Continuity": "",
       "registry_game_id": "unconfirmed"
     },
     {
@@ -182,10 +186,10 @@
       "Translation Review Status": "",
       "Translation Note": "",
       "Platform": "iOS, Android, Steam",
-      "Publisher": "Gravity Game Vision",
-      "Developer": "unconfirmed",
+      "Publisher": "GRAVITY",
+      "Developer": "Gravity Game Vision",
       "Release Date": "2026-07-14",
-      "Genre": "unconfirmed",
+      "Genre": "Open-world MMORPG / Role-playing",
       "Top 3 Markets": "",
       "SG App Store Ranks": "SG App Store Ranks: iOS (DL #NA / Rev #17) || Android (DL #NA / Rev #26)",
       "unified_app_id": "com.ggv.roworldsea.aos;6754275005",
@@ -203,6 +207,7 @@
       "source_urls": "https://store.steampowered.com/app/4212480/",
       "Continuity Note": "Mobile version was first covered in the 21 Jul 2026 brief. This report adds the later Steam PC release.",
       "Continuity Brief Href": "proof-runs/2026-07-21/latest-brief.html",
+      "Continuity": "Mobile first covered in 21 Jul 2026 brief; later Steam PC release added here.",
       "registry_game_id": "game-18c6ff5bafcc"
     },
     {
@@ -244,6 +249,7 @@
       "source_urls": "https://store.steampowered.com/app/3561220/Pass_the_Fear/ | https://steamdb.info/app/3561220/",
       "Continuity Note": "",
       "Continuity Brief Href": "",
+      "Continuity": "",
       "registry_game_id": "unconfirmed"
     },
     {
@@ -285,6 +291,7 @@
       "source_urls": "https://store.steampowered.com/app/2436940/Sephiria/ | https://steamdb.info/app/2436940/charts/ | https://sephiria.org/",
       "Continuity Note": "",
       "Continuity Brief Href": "",
+      "Continuity": "",
       "registry_game_id": "unconfirmed"
     },
     {
@@ -326,6 +333,7 @@
       "source_urls": "https://store.steampowered.com/app/4570720/DragonSword__Awakening/ | https://steamdb.info/app/4570720/ | https://www.invenglobal.com/articles/24016/the-late-blooming-flower-of-action-dragon-sword-awakening-85",
       "Continuity Note": "",
       "Continuity Brief Href": "",
+      "Continuity": "",
       "registry_game_id": "unconfirmed"
     }
   ],
