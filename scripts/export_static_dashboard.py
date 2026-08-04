@@ -821,6 +821,33 @@ def report_table(rows, released=False):
     return f'<div class="{cls}"><table><thead><tr>{head}</tr></thead><tbody>{body or empty}</tbody></table></div>'
 
 
+def tracker_table(rows):
+    fields = [
+        "Game Title",
+        "Signal Type",
+        "Publisher",
+        "Developer",
+        "Platform",
+        "Release Date",
+        "Genre",
+        "SG Gross Revenue",
+        "SG Downloads",
+        "Top 3 Markets",
+        "SG App Store Ranks",
+        "Steam Peak",
+        "Steam Reviews",
+        "Steam URL",
+        "Related Brief",
+    ]
+    head = "".join(f"<th>{escape(field)}</th>" for field in fields)
+    body = "".join(
+        "<tr>" + "".join(table_cell(row, field) for field in fields) + "</tr>"
+        for row in rows
+    )
+    empty = f'<tr><td colspan="{len(fields)}">No tracker rows available.</td></tr>'
+    return f'<div class="data-table released-table"><table><thead><tr>{head}</tr></thead><tbody>{body or empty}</tbody></table></div>'
+
+
 def table_cell(row, field):
     value = row.get(field, "")
     if field == "Game Title":
@@ -848,6 +875,12 @@ def table_cell(row, field):
         return f"<td>{link}</td>"
     if field == "Release Date":
         return f'<td><span class="metric-badge neutral">{escape(display_date(value) or str(value or ""))}</span></td>'
+    if field == "Related Brief":
+        href = row.get("_brief_href", "")
+        text = value or row.get("_brief_label", "")
+        if href:
+            return f'<td><a href="{escape(href)}">{escape(text)}</a></td>'
+        return f"<td>{escape(str(text or ''))}</td>"
     return f"<td>{escape(str(value or ''))}</td>"
 
 
@@ -1015,6 +1048,24 @@ def proof_archive_cards(records):
     return "".join(cards)
 
 
+def tracker_rows_across_briefs(fallback_rows):
+    records = proof_run_records()
+    if not records:
+        return fallback_rows
+    tracker_rows = []
+    for record in records:
+        payload_path = PROOF_RUNS / record["meeting_key"] / "final-report.json"
+        payload = read_json(payload_path, {})
+        for row in payload.get("rows") or []:
+            tracker_row = dict(row)
+            label = f'{record["meeting"]} mock report'
+            tracker_row["Related Brief"] = f'{label} | {record["period"]}'
+            tracker_row["_brief_label"] = label
+            tracker_row["_brief_href"] = record["href"]
+            tracker_rows.append(tracker_row)
+    return tracker_rows
+
+
 def historical_page(rows, schedule, metadata, weekly_summary=None):
     in_progress_start, in_progress_end = in_progress_period(schedule)
     staging_note = staging_summary_text(weekly_summary or {})
@@ -1041,6 +1092,7 @@ def historical_page(rows, schedule, metadata, weekly_summary=None):
 
 
 def tracker_page(rows, schedule, metadata):
+    tracker_rows = tracker_rows_across_briefs(rows)
     body = (
         page_header("Game Tracker", "Games mentioned across briefs", "A structured working view for games, publishers, status, and related brief evidence.")
         + """<section class="tracker-filters control-panel">
@@ -1049,7 +1101,7 @@ def tracker_page(rows, schedule, metadata):
   <button type="button" id="clearTrackerFilters">Clear</button>
 </section>
 <div class="filter-chips"><span>Filters</span><a class="filter-chip" href="latest-brief.html"><span>Open</span>Latest brief</a></div>"""
-        + report_table(rows)
+        + tracker_table(tracker_rows)
     )
     return page_shell("Game Tracker", "tracker", body, rows, schedule, metadata)
 
