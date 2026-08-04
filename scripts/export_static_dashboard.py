@@ -135,6 +135,30 @@ def normalized_key(value):
     return re.sub(r"\s+", " ", text).strip()
 
 
+GAME_KEY_DETAIL_OVERRIDES = {
+    "star sailors": "Star Sailors is a mobile turn-based collectible RPG built around recruiting characters, forming squads, and resolving battles through team synergy and skill timing. Its USP is a space-fantasy collection loop backed by Com2uS publishing, giving it recognizable RPG progression in a mobile-first format.",
+    "cookierun classic": "CookieRun Classic is a mobile endless-runner revival where players jump, slide, collect jellies, pair cookies with pets, and chase higher scores through repeated runs. Its USP is nostalgia-led CookieRun gameplay, bringing a familiar franchise loop back in a simple, accessible mobile format.",
+    "qi refining 3000 levels the fallen empress forces me to ascend": "Qi Refining 3000 Levels is a vertical idle xianxia RPG where players grow a cultivation character through automated progression, boss fights, gear upgrades, mounts, and cross-server activities. Its USP is the Chinese cultivation fantasy theme combined with low-friction idle progression for players who want RPG growth without heavy manual play.",
+    "once upon a time there was a street": "Once upon a time, there was a street is a mobile management simulation where players rebuild an ancient street by opening shops, attracting residents, and expanding a historical marketplace. Its USP is a cozy heritage-commerce theme, turning town restoration and shop management into a casual mobile loop.",
+    "section cloud fantasia": "Section: Cloud Fantasia is a fantasy mobile MMORPG where players explore open zones, build characters, collect companions, run dungeons, and fight alongside pets. Its USP is an anime-style cloud-fantasy world with familiar mobile MMO progression and companion-driven combat.",
+    "ragnarok the new world": "Ragnarok: The New World is a mobile open-world MMORPG built around class progression, exploration, monster combat, trading, and social play. Its USP is the Ragnarok IP in a broader open-world mobile format, giving an established SEA franchise a newer exploration-led presentation.",
+    "digimon up": "DIGIMON UP is a mobile idle-raising RPG where players collect Digimon, raise them over time, and progress through lightweight battles and upgrades. Its USP is the Digimon IP combined with a low-maintenance mobile raising loop that fits short daily sessions.",
+    "ms freedom horizon": "MS: Freedom Horizon is a mobile mecha strategy RPG where players pilot mechs, build battle lineups, and use turn-based tactics against wasteland enemies. Its USP is a mecha-collection fantasy with deck-style combat, giving strategy RPG players a robot-focused alternative to character-only gachas.",
+    "聖杯神諭": "聖杯神諭 is a mobile fantasy RPG built around hero progression, party-building, and role-playing combat. Its USP is a fantasy collection-and-growth loop aimed at players who want familiar mobile RPG systems in a compact regional release.",
+    "the walking dead aftermath": "The Walking Dead: Aftermath is a mobile roguelite survival RPG where players fight walkers, make survivor choices, upgrade characters, and manage risk across repeated runs. Its USP is the Walking Dead license applied to mobile survival progression, combining recognizable horror IP with roguelite replayability.",
+    "hololive dreams": "hololive Dreams is a mobile-led Rhythm RPG where players use hololive talent characters and music-driven battles across iOS, Android, and Steam. Its USP is the hololive fan ecosystem packaged into a cross-platform game, combining idol/music appeal with RPG progression.",
+    "cookierun crumble idle rpg": "CookieRun: Crumble - Idle RPG is a mobile idle RPG where Cookie squads battle automatically while players upgrade teams, collect characters, and improve progression efficiency. Its USP is the CookieRun franchise adapted into a hands-off RPG loop, making the brand playable for idle-game audiences.",
+    "blade heroes mecha soul": "Blade Heroes: Mecha Soul is a mobile idle RPG built around mecha-themed heroes, automated battles, character upgrades, and long-term power progression. Its USP is the eastern-mecha theme layered onto familiar idle RPG systems, giving players a sci-fi alternative to fantasy idle games.",
+    "lordrush": "Lordrush is a mobile strategy and tower-defense game where players rebuild a fortress, gather resources, upgrade defenses, and repel enemy waves. Its USP is a medieval base-building loop that combines casual resource growth with defensive strategy.",
+    "palworld": "Palworld is an open-world survival crafting game where players capture creatures, build bases, automate production, fight enemies, and explore with multiplayer support. Its USP is the blend of creature collection with survival crafting and base automation, making it broader than a standard monster-battling game.",
+    "spiritvale": "SpiritVale is a PC action MMORPG where players choose classes, build characters, fight monsters, clear dungeons, and chase world-boss progression. Its USP is a classic MMO progression structure delivered as an early-access Steam title with action combat emphasis.",
+    "echoes of aincrad": "Echoes of Aincrad is a Sword Art Online action RPG where players progress through quests, real-time combat, and character growth across PC and console platforms. Its USP is the Sword Art Online IP returning to Aincrad-style RPG fantasy with broader platform reach.",
+    "pass the fear": "Pass the Fear is a roguelite bullet-hell action RPG where players survive escalating enemy waves, dodge projectile patterns, and build a stronger run through upgrades. Its USP is the mix of survival pressure, bullet-hell movement, and roguelite progression in a compact PC action format.",
+    "sephiria": "Sephiria is a top-down pixel-art action roguelite where players descend a tower, fight demons, collect artifacts, and improve with each run. Its USP is a polished 2D action loop with clear roguelite replayability and a distinctive rabbit-hero fantasy premise.",
+    "dragonsword awakening": "DragonSword: Awakening is an anime-style open-world action RPG where players explore Orbis, switch through tag-action combat, and progress through fantasy quests and character builds. Its USP is Unreal Engine 5 presentation combined with fast character-switching action, positioning it as a premium-looking anime RPG.",
+}
+
+
 def meeting_date_from_schedule(schedule):
     meeting = parse_date(schedule.get("upcoming_meeting_date", ""))
     return meeting.isoformat() if meeting else ""
@@ -248,6 +272,23 @@ def game_layer_reason(row, enriched=None):
     return "Mobile title selected from Sensor Tower Singapore revenue, download, and rank evidence."
 
 
+def game_key_details(row, enriched=None):
+    title = game_title(row) if "report_classification" in row else title_for(row)
+    override = GAME_KEY_DETAIL_OVERRIDES.get(normalized_key(title))
+    if override:
+        return override
+    if enriched:
+        summary = " ".join(
+            part.strip()
+            for part in (enriched.get("summary_sentence_1"), enriched.get("summary_sentence_2"))
+            if part and part.strip().lower() != "unconfirmed"
+        )
+        if summary:
+            return summary
+    genre = row.get("genre") or row.get("Genre") or "game"
+    return f"{title} is a {genre} selected for the report. Gameplay and USP details still need manual enrichment."
+
+
 def top_markets_text(row):
     parts = []
     for index in range(1, 5):
@@ -292,6 +333,7 @@ def game_layer_report_rows(meeting_date):
                 "SG Gross Revenue": "" if is_pc_only else row.get("sg_revenue_gross") or "0",
                 "SG Downloads": "" if is_pc_only else row.get("sg_downloads") or "0",
                 "Inclusion Reason": game_layer_reason(row, enriched),
+                "Key Details": game_key_details(row, enriched),
                 "Game Title": title,
                 "English Display Title": title,
                 "Original Title": row.get("unified_name") or row.get("pc_title") or title,
@@ -712,7 +754,7 @@ def signal_card(row, group):
     title = title_for(row)
     original = row.get("Original Title") or row.get("original_title") or ""
     title_note = f'\n    <p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
-    reason = row.get("Market Overview Reason") or row.get("Inclusion Reason") or row.get("Key Details") or "Available in current final report output."
+    details = row.get("Key Details") or row.get("Market Overview Reason") or row.get("Inclusion Reason") or "Available in current final report output."
     pill_class = "strong" if group == "strong" else "emerging"
     card_class = "rich-signal-card" if group == "strong" else "rich-signal-card emerging"
     performance_heading = "PC Performance" if row.get("report_classification") == "pc_only" else "Local Performance"
@@ -737,7 +779,7 @@ def signal_card(row, group):
   </div>
   <div class="card-block card-evidence">
     <h4>Key Details</h4>
-    <p>{escape(reason)}</p>
+    <p>{escape(details)}</p>
   </div>
 </article>"""
 
