@@ -226,8 +226,9 @@ button:disabled,.btn[disabled],button[aria-disabled="true"]{opacity:.55;cursor:n
 .news-context-card a{font-weight:900;color:var(--blue-600)}
 .tracker-filters label{display:grid;gap:6px;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
 .tracker-filters input,.tracker-filters select{min-width:min(320px,100%)}
-.original-title{font-size:13px;color:var(--ink-2)}
+.original-title{font-size:12px;font-style:italic;color:#7B8794}
 .original-title span{display:block}
+.company-meta{color:var(--ink-2);font-size:13px;font-weight:650}
 .methodology a{color:var(--blue-600);font-weight:900}
 .chip-list,.meta-chip-row{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
 .metric-badge{display:inline-flex;align-items:center;min-height:28px;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900;line-height:1.2;border:1px solid #D9E2EC;background:#F7FAFC;color:var(--ink-2)}
@@ -300,7 +301,7 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 .signal-heading span{font-size:13px!important;line-height:1.35!important;text-align:right!important}
 .signal-card{height:auto!important;min-height:0!important;border-radius:15px!important;padding:16px!important;gap:13px!important;box-shadow:0 10px 22px rgba(9,30,66,.07)!important}
 .signal-card h3{font-size:clamp(20px,1.5vw,23px)!important;line-height:1.15!important}
-.publisher-line{font-size:14.5px!important;line-height:1.3!important}
+.publisher-line{font-size:13px!important;line-height:1.3!important;color:var(--ink-2)!important;font-weight:650!important}
 .meta-chip-row{margin-top:10px!important}
 .card-block{padding-top:11px!important}
 .card-block h4{font-size:11px!important;margin-bottom:8px!important}
@@ -361,7 +362,7 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
   .site-header{position:relative!important}
   .top-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;overflow:visible!important;white-space:normal!important}
   .top-nav a{width:100%!important;white-space:normal!important;line-height:1.15!important;text-align:center!important;min-height:40px!important}
-  .slim-context-bar,.compact-topbar{position:relative!important;top:auto!important;display:grid!important;grid-template-columns:1fr!important}
+  .slim-context-bar,.compact-topbar{position:sticky!important;top:0!important;display:grid!important;grid-template-columns:1fr!important}
   .inline-context{display:block!important}
   .inline-context b,.inline-context span{display:inline!important;white-space:normal!important}
   .latest-archive-callout{display:grid!important;grid-template-columns:1fr!important}

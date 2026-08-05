@@ -1,7 +1,7 @@
 {
   "rows": [
     {
-      "Signal Type": "Strong Market Signal",
+      "Signal Type": "High Revenue Signal",
       "Signal Definition": "Game-layer final report row.",
       "SG Gross Revenue": "180003.03",
       "SG Downloads": "8613",
@@ -43,7 +43,7 @@
       "registry_game_id": "unconfirmed"
     },
     {
-      "Signal Type": "Strong Market Signal",
+      "Signal Type": "High Revenue Signal",
       "Signal Definition": "Game-layer final report row.",
       "SG Gross Revenue": "34492.57",
       "SG Downloads": "4684",
@@ -85,7 +85,7 @@
       "registry_game_id": "unconfirmed"
     },
     {
-      "Signal Type": "Strong Market Signal",
+      "Signal Type": "High Revenue Signal",
       "Signal Definition": "Game-layer final report row.",
       "SG Gross Revenue": "14134.17",
       "SG Downloads": "5083",
@@ -127,7 +127,7 @@
       "registry_game_id": "unconfirmed"
     },
     {
-      "Signal Type": "Emerging Market Signal",
+      "Signal Type": "Early Revenue Signal",
       "Signal Definition": "Game-layer final report row.",
       "SG Gross Revenue": "1176.49",
       "SG Downloads": "2723",
@@ -169,7 +169,7 @@
       "registry_game_id": "unconfirmed"
     },
     {
-      "Signal Type": "Strong Market Signal",
+      "Signal Type": "High Revenue Signal",
       "Signal Definition": "Game-layer final report row.",
       "SG Gross Revenue": "8729.03",
       "SG Downloads": "329.0",
@@ -211,7 +211,7 @@
       "registry_game_id": "game-18c6ff5bafcc"
     },
     {
-      "Signal Type": "Strong Market Signal",
+      "Signal Type": "High Revenue Signal",
       "Signal Definition": "Game-layer final report row.",
       "SG Gross Revenue": "",
       "SG Downloads": "",
@@ -253,7 +253,7 @@
       "registry_game_id": "unconfirmed"
     },
     {
-      "Signal Type": "Strong Market Signal",
+      "Signal Type": "High Revenue Signal",
       "Signal Definition": "Game-layer final report row.",
       "SG Gross Revenue": "",
       "SG Downloads": "",
@@ -295,7 +295,7 @@
       "registry_game_id": "unconfirmed"
     },
     {
-      "Signal Type": "Strong Market Signal",
+      "Signal Type": "High Revenue Signal",
       "Signal Definition": "Game-layer final report row.",
       "SG Gross Revenue": "",
       "SG Downloads": "",

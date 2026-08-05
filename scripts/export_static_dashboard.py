@@ -229,8 +229,8 @@ def game_layer_signal(row):
     sg_gross = safe_float(row.get("sg_revenue_gross"))
     steam_peak = safe_float(row.get("steamdb_peak"))
     if classification == "pc_only":
-        return "Strong Market Signal" if steam_peak >= 10000 else "Emerging Market Signal"
-    return "Strong Market Signal" if sg_gross >= 3000 else "Emerging Market Signal"
+        return "High Revenue Signal" if steam_peak >= 10000 else "Early Revenue Signal"
+    return "High Revenue Signal" if sg_gross >= 3000 else "Early Revenue Signal"
 
 
 def game_layer_platform(row, enriched=None):
@@ -445,14 +445,22 @@ def value_chips(value):
 
 def status_badge(label):
     text = str(label or "N/A").strip()
-    kind = "strong" if "strong" in text.lower() else "emerging"
+    lowered = text.lower()
+    if "strong" in lowered or "high revenue" in lowered:
+        text = "High Revenue Signal"
+        kind = "strong"
+    elif "emerging" in lowered or "early revenue" in lowered:
+        text = "Early Revenue Signal"
+        kind = "emerging"
+    else:
+        kind = "emerging"
     return f'<span class="metric-badge {kind}">{escape(text)}</span>'
 
 
 def performance_block(row):
     return f"""<div class="stat-grid sg-performance">
-  <div class="stat-cell"><span>Revenue</span><b>{escape(money(row.get("SG Gross Revenue")))}</b></div>
-  <div class="stat-cell"><span>Downloads</span><b>{escape(number(row.get("SG Downloads")))}</b></div>
+  <div class="stat-cell"><span>SG ST Gross Revenue</span><b>{escape(money(row.get("SG Gross Revenue")))}</b></div>
+  <div class="stat-cell"><span>ST Downloads</span><b>{escape(number(row.get("SG Downloads")))}</b></div>
 </div>"""
 
 
@@ -465,7 +473,7 @@ def top_markets_block(value):
         downloads = item.get("downloads") or ""
         rows.append(
             f'<div class="market-row"><span class="market-rank">#{index}</span><b>{escape(item.get("market", ""))}</b>'
-            f'<span>{escape(item.get("revenue") or "N/A")}</span><span>{escape((downloads + " DL") if downloads else "N/A")}</span></div>'
+            f'<span>{escape(item.get("revenue") or "N/A")}</span><span>{escape((downloads + " ST DL") if downloads else "N/A")}</span></div>'
         )
     return '<div class="structured-block top-markets"><h5>Top Markets</h5>' + "".join(rows) + "</div>"
 
@@ -620,7 +628,7 @@ def signal_group(row):
 
 
 def signal_label(row):
-    return row.get("Signal Type") or ("Strong Market Signal" if signal_group(row) == "strong" else "Emerging Market Signal")
+    return "High Revenue Signal" if signal_group(row) == "strong" else "Early Revenue Signal"
 
 
 def title_for(row):
@@ -698,7 +706,7 @@ def summary_cards(rows):
         cards = [
             ("snapshot", "Current snapshot", "0 included launches", "No weekly candidates"),
             ("opportunity", "Top opportunity", "N/A", "No candidate met the extraction criteria"),
-            ("action", "SG gross revenue", "$0", "No candidate revenue in this window"),
+            ("action", "Total SG ST Gross Revenue", "$0", "From included mobile titles; PC-only games excluded"),
         ]
         return '<section class="summary-card-grid">' + "".join(
             f'<article class="summary-card {escape(kind)}"><small>{escape(label)}</small><h3>{escape(headline)}</h3><p>{escape(detail)}</p></article>'
@@ -707,11 +715,12 @@ def summary_cards(rows):
     strong = [r for r in rows if signal_group(r) == "strong"]
     emerging = [r for r in rows if signal_group(r) != "strong"]
     leader = max(rows, key=lambda r: safe_float(r.get("SG Gross Revenue")), default={})
-    total_revenue = sum(safe_float(r.get("SG Gross Revenue")) for r in rows)
+    mobile_rows = [row for row in rows if row.get("report_classification") != "pc_only"]
+    total_revenue = sum(safe_float(r.get("SG Gross Revenue")) for r in mobile_rows)
     cards = [
         ("snapshot", "Current snapshot", f"{len(rows)} included launches", f"{len(strong)} strong / {len(emerging)} emerging"),
         ("opportunity", "Top opportunity", title_for(leader) if leader else "No title available", money(leader.get("SG Gross Revenue")) if leader else "N/A"),
-        ("action", "SG gross revenue", money(total_revenue), "Estimated from available report output"),
+        ("action", "Total SG ST Gross Revenue", money(total_revenue), "From included mobile titles; PC-only games excluded"),
     ]
     return '<section class="summary-card-grid">' + "".join(
         f'<article class="summary-card {escape(kind)}"><small>{escape(label)}</small><h3>{escape(headline)}</h3><p>{escape(detail)}</p></article>'
@@ -735,8 +744,8 @@ def executive_summary(rows):
     leader = max(rows, key=lambda r: safe_float(r.get("SG Gross Revenue")), default={})
     bullets = [
         f"{len(rows)} released-game record(s) are included in the current market brief.",
-        f"{len(strong)} title(s) are classified as Strong Market Signals and {len(emerging)} are Emerging Market Signals.",
-        f"{title_for(leader)} leads available SG revenue at {money(leader.get('SG Gross Revenue'))}." if leader else "No lead title is available in the current output.",
+        f"{len(strong)} title(s) are classified as High Revenue Signals and {len(emerging)} are Early Revenue Signals.",
+        f"{title_for(leader)} leads available SG ST Gross Revenue at {money(leader.get('SG Gross Revenue'))}." if leader else "No lead title is available in the current output.",
     ]
     return f"""<section class="brief-section executive-section">
   <div class="section-heading"><div><h2>Executive Summary</h2><p>Level 1 scan: what changed, why it matters, and where to focus.</p></div></div>
@@ -830,7 +839,7 @@ def report_table(rows, released=False):
     if classification == "pc_only":
         fields += ["Steam Peak", "Steam Reviews", "Steam URL"]
     else:
-        fields += ["SG Gross Revenue", "SG Downloads", "Top 3 Markets", "SG App Store Ranks"]
+        fields += ["SG ST Gross Revenue", "ST Downloads", "Top 3 Markets", "SG App Store Ranks"]
         if classification == "mobile_led_cross_platform":
             fields += ["Steam Peak", "Steam Reviews", "Steam URL"]
     if any(row.get("Continuity Note") for row in rows):
@@ -854,8 +863,8 @@ def tracker_table(rows):
         "Platform",
         "Release Date",
         "Genre",
-        "SG Gross Revenue",
-        "SG Downloads",
+        "SG ST Gross Revenue",
+        "ST Downloads",
         "Top 3 Markets",
         "SG App Store Ranks",
         "Steam Peak",
@@ -874,16 +883,22 @@ def tracker_table(rows):
 
 
 def table_cell(row, field):
-    value = row.get(field, "")
+    source_field = {
+        "SG ST Gross Revenue": "SG Gross Revenue",
+        "ST Downloads": "SG Downloads",
+    }.get(field, field)
+    value = row.get(source_field, "")
     if field == "Game Title":
         original = row.get("Original Title") or ""
         return f"<td><b>{escape(title_for(row))}</b>{f'<small>{escape(original)}</small>' if original and original != title_for(row) else ''}</td>"
-    if field == "SG Gross Revenue":
+    if field in ("SG Gross Revenue", "SG ST Gross Revenue"):
         return f'<td class="num">{escape(money(value))}</td>'
-    if field == "SG Downloads":
+    if field in ("SG Downloads", "ST Downloads"):
         return f'<td class="num">{escape(number(value))}</td>'
     if field == "Signal Type":
         return f"<td>{status_badge(value)}</td>"
+    if field in ("Publisher", "Developer"):
+        return f'<td><span class="company-meta">{escape(str(value or ""))}</span></td>'
     if field in ("Platform", "Genre"):
         return f"<td>{value_chips(value)}</td>"
     if field == "Top 3 Markets":
@@ -1134,7 +1149,7 @@ def tracker_page(rows, schedule, metadata):
         page_header("Game Tracker", "Games mentioned across briefs", "A structured working view for games, publishers, status, and related brief evidence.")
         + """<section class="tracker-filters control-panel">
   <label>Search <input id="trackerSearch" placeholder="Game, publisher, genre"></label>
-  <label>Signal <select id="signalFilter"><option value="">All signals</option><option>Strong Market Signal</option><option>Emerging Market Signal</option></select></label>
+  <label>Signal <select id="signalFilter"><option value="">All signals</option><option>High Revenue Signal</option><option>Early Revenue Signal</option></select></label>
   <button type="button" id="clearTrackerFilters">Clear</button>
 </section>
 <div class="filter-chips"><span>Filters</span><a class="filter-chip" href="latest-brief.html"><span>Open</span>Latest brief</a></div>"""
@@ -1196,8 +1211,9 @@ def write_assets():
 .news-context-card a{font-weight:900;color:var(--blue-600)}
 .tracker-filters label{display:grid;gap:6px;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
 .tracker-filters input,.tracker-filters select{min-width:min(320px,100%)}
-.original-title{font-size:13px;color:var(--ink-2)}
+.original-title{font-size:12px;font-style:italic;color:#7B8794}
 .original-title span{display:block}
+.company-meta{color:var(--ink-2);font-size:13px;font-weight:650}
 .methodology a{color:var(--blue-600);font-weight:900}
 .chip-list,.meta-chip-row{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
 .metric-badge{display:inline-flex;align-items:center;min-height:28px;border-radius:999px;padding:5px 9px;font-size:12px;font-weight:900;line-height:1.2;border:1px solid #D9E2EC;background:#F7FAFC;color:var(--ink-2)}
@@ -1270,7 +1286,7 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 .signal-heading span{font-size:13px!important;line-height:1.35!important;text-align:right!important}
 .signal-card{height:auto!important;min-height:0!important;border-radius:15px!important;padding:16px!important;gap:13px!important;box-shadow:0 10px 22px rgba(9,30,66,.07)!important}
 .signal-card h3{font-size:clamp(20px,1.5vw,23px)!important;line-height:1.15!important}
-.publisher-line{font-size:14.5px!important;line-height:1.3!important}
+.publisher-line{font-size:13px!important;line-height:1.3!important;color:var(--ink-2)!important;font-weight:650!important}
 .meta-chip-row{margin-top:10px!important}
 .card-block{padding-top:11px!important}
 .card-block h4{font-size:11px!important;margin-bottom:8px!important}
@@ -1331,7 +1347,7 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
   .site-header{position:relative!important}
   .top-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;overflow:visible!important;white-space:normal!important}
   .top-nav a{width:100%!important;white-space:normal!important;line-height:1.15!important;text-align:center!important;min-height:40px!important}
-  .slim-context-bar,.compact-topbar{position:relative!important;top:auto!important;display:grid!important;grid-template-columns:1fr!important}
+  .slim-context-bar,.compact-topbar{position:sticky!important;top:0!important;display:grid!important;grid-template-columns:1fr!important}
   .inline-context{display:block!important}
   .inline-context b,.inline-context span{display:inline!important;white-space:normal!important}
   .latest-archive-callout{display:grid!important;grid-template-columns:1fr!important}
