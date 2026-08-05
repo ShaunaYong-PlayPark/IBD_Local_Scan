@@ -739,7 +739,7 @@ def page_shell(title, active, body, rows, schedule, metadata):
     <header class="site-header">
       <div class="brand top-brand">
         <h1>IBD Market Intelligence</h1>
-        <p>Singapore &middot; Mobile Launch Discovery</p>
+        <p>SEA6 &middot; Mobile Launch Discovery</p>
         <span>Report Dashboard</span>
       </div>
       <nav class="top-nav" aria-label="Primary navigation">{nav}</nav>
@@ -776,7 +776,7 @@ def summary_cards(rows):
         cards = [
             ("snapshot", "Current snapshot", "0 included launches", "No weekly candidates"),
             ("opportunity", "Top opportunity", "N/A", "No candidate met the extraction criteria"),
-            ("action", "Total SG ST Gross Revenue", "$0", "From included mobile titles; PC-only games excluded"),
+            ("action", "Singapore ST Gross Revenue", "$0", "Singapore country view; PC-only games excluded"),
         ]
         return '<section class="summary-card-grid">' + "".join(
             f'<article class="summary-card {escape(kind)}"><small>{escape(label)}</small><h3>{escape(headline)}</h3><p>{escape(detail)}</p></article>'
@@ -790,7 +790,7 @@ def summary_cards(rows):
     cards = [
         ("snapshot", "Current snapshot", f"{len(rows)} included launches", f"{len(strong)} high / {len(emerging)} early"),
         ("opportunity", "Top opportunity", title_for(leader) if leader else "No title available", money(leader.get("SG Gross Revenue")) if leader else "N/A"),
-        ("action", "Total SG ST Gross Revenue", money(total_revenue), "From included mobile titles; PC-only games excluded"),
+        ("action", "Singapore ST Gross Revenue", money(total_revenue), "Singapore country view; PC-only games excluded"),
     ]
     return '<section class="summary-card-grid">' + "".join(
         f'<article class="summary-card {escape(kind)}"><small>{escape(label)}</small><h3>{escape(headline)}</h3><p>{escape(detail)}</p></article>'
@@ -887,7 +887,7 @@ def sea_regional_section(sea_games, report_rows):
     tabs = ['<a class="sea-tab active" href="#sea6-summary">SEA6 Summary</a>']
     panels = []
     for country, name in country_names.items():
-        tabs.append(f'<a class="sea-tab" href="#sea-{country.lower()}">{name}</a>')
+        tabs.append(f'<a class="sea-tab" href="#sea-{country.lower()}" data-sea-target="sea-{country.lower()}" aria-selected="false">{name}</a>')
         prefix = country.lower()
         country_rows = sorted(
             [row for row in included if safe_float(row.get(f"{prefix}_revenue_gross")) or safe_float(row.get(f"{prefix}_downloads"))],
@@ -898,15 +898,17 @@ def sea_regional_section(sea_games, report_rows):
             f"No included new games in {name}", "No qualifying SEA6 commercial signal was detected for this country."
         )
         panels.append(
-            f'<section class="sea-country-panel" id="sea-{prefix}"><div class="section-heading"><div><h2>{name}</h2><p>Included new games with country-level Sensor Tower evidence.</p></div></div><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><div class="sea-country-grid">{cards}</div></section>'
+            f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden><div class="section-heading"><div><h2>{name}</h2><p>Included new games with country-level Sensor Tower evidence.</p></div></div><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><div class="sea-country-grid">{cards}</div></section>'
         )
     ranking_as_of = display_date(summary["ranking_data_as_of"]) or "N/A"
     return f'''<section class="brief-section sea-regional-section">
+  <nav class="sea-country-tabs" aria-label="SEA6 country views"><a class="sea-tab active" href="#sea6-summary" data-sea-target="sea6-summary-panel" aria-selected="true">SEA6 Summary</a>{"".join(tabs[1:])}</nav>
+  <div class="sea-view-panel sea-summary-panel active" id="sea6-summary-panel">
   <div class="section-heading"><div><h2 id="sea6-summary">SEA6 Summary</h2><p>Regional view of included new mobile games across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div><span class="sea-ranking-note">Ranking data as of <b>{escape(ranking_as_of)}</b></span></div>
   <div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(summary["sea_st_gross_revenue"]))}</b><em>Included new games only</em></span><span><small>SEA6 ST Downloads</small><b>{escape(number(summary["sea_st_downloads"]))}</b><em>Included new games only</em></span><span><small>Included new mobile games</small><b>{summary["game_count"]}</b></span><span><small>Games in 2+ countries</small><b>{summary["multi_country_game_count"]}</b></span><span><small>Top revenue country</small><b>{escape(summary["top_country_by_revenue"])}</b></span><span><small>Top download country</small><b>{escape(summary["top_country_by_downloads"])}</b></span></div>
   <h3 class="signal-heading">Top Regional Games <span>One row per game, ranked by combined SEA6 ST Gross Revenue.</span></h3>
   <div class="data-table sea-regional-table"><table><thead><tr><th>English title</th><th>Countries appeared in</th><th>SEA6 ST Gross Revenue</th><th>SEA6 ST Downloads</th><th>Top revenue country</th><th>Signal label</th></tr></thead><tbody>{"".join(table_rows)}</tbody></table></div>
-  <nav class="sea-country-tabs" aria-label="SEA6 country views">{"".join(tabs)}</nav>
+  </div>
   {"".join(panels)}
 </section>'''
 
@@ -1208,11 +1210,11 @@ def latest_page(rows, schedule, metadata, view="cards", news_context=None, sea_g
     body = (
         page_header(
             "Market Brief",
-            "Singapore Gaming Market",
-            "Executive view of the latest Singapore market scan.",
+            "SEA6 Gaming Market",
+            "Regional view of the latest SEA6 market scan.",
         )
-        + summary_cards(rows)
         + sea_regional_section(sea_games or [], rows)
+        + summary_cards(rows)
         + executive_summary(rows)
         + released_games_section(strong, emerging, view)
         + news_context_section(news_context)
@@ -1403,7 +1405,9 @@ def write_assets():
 .sea-summary-strip em{display:block;color:var(--muted);font-size:11px;font-style:normal;margin-top:3px}
 .sea-regional-table{margin:0 0 18px}
 .sea-regional-table table{min-width:900px!important}
-.sea-country-tabs{display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px;margin-top:4px}
+.sea-country-tabs{position:sticky;top:106px;z-index:30;display:flex;gap:8px;flex-wrap:wrap;border:1px solid var(--line);padding:10px;margin:-4px 0 16px;background:#FFFFFFF7;backdrop-filter:blur(8px);border-radius:12px;box-shadow:0 5px 16px rgba(9,30,66,.08)}
+.sea-view-panel[hidden]{display:none!important}
+.sea-view-panel.active{display:block}
 .sea-tab{display:inline-flex;padding:9px 13px;border:1px solid #CFE8E1;border-radius:999px;background:#F3FBF8;color:#126B59;text-decoration:none;font-weight:900;font-size:13px}
 .sea-tab:hover,.sea-tab.active{background:#126B59;color:#fff}
 .sea-country-panel{border-top:1px solid var(--line);padding-top:18px;margin-top:18px;scroll-margin-top:120px}
@@ -1564,14 +1568,16 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
   .site-header{grid-template-columns:1fr!important;gap:9px!important}
   .top-nav{justify-content:flex-start!important;overflow-x:auto!important;flex-wrap:nowrap!important;padding-bottom:2px!important}
   .slim-context-bar,.compact-topbar{top:104px!important;align-items:flex-start!important}
+  .sea-country-tabs{top:150px!important}
   .combined-archive-grid{grid-template-columns:1fr!important}
   .combined-timeline{position:relative!important;top:auto!important}
 }
 @media(max-width:820px){
-  .site-header{position:relative!important}
+  .site-header{position:sticky!important;top:0!important}
   .top-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;overflow:visible!important;white-space:normal!important}
   .top-nav a{width:100%!important;white-space:normal!important;line-height:1.15!important;text-align:center!important;min-height:40px!important}
-  .slim-context-bar,.compact-topbar{position:sticky!important;top:0!important;display:grid!important;grid-template-columns:1fr!important}
+  .slim-context-bar,.compact-topbar{position:sticky!important;top:104px!important;display:grid!important;grid-template-columns:1fr!important}
+  .sea-country-tabs{top:182px!important;overflow-x:auto!important;flex-wrap:nowrap!important}
   .inline-context{display:block!important}
   .inline-context b,.inline-context span{display:inline!important;white-space:normal!important}
   .latest-archive-callout{display:grid!important;grid-template-columns:1fr!important}
@@ -1602,7 +1608,7 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
     write_text(ASSETS / "static-dashboard.css", css)
     write_text(
         ASSETS / "static-dashboard.js",
-        """document.addEventListener('DOMContentLoaded',()=>{const params=new URLSearchParams(location.search);const current=params.get('view')==='table'?'table':'cards';if(current==='table'){document.body.classList.add('table-mode')}document.querySelectorAll('.view-toggle a').forEach(link=>{const url=new URL(link.href,location.href);const mode=url.searchParams.get('view')==='table'?'table':'cards';if(mode===current){link.classList.add('active');link.setAttribute('aria-current','true')}else{link.classList.remove('active');link.setAttribute('aria-current','false')}});const search=document.getElementById('trackerSearch');const signal=document.getElementById('signalFilter');const clear=document.getElementById('clearTrackerFilters');function filterRows(){const q=(search&&search.value||'').toLowerCase();const sig=(signal&&signal.value||'').toLowerCase();document.querySelectorAll('.data-table tbody tr').forEach(row=>{const text=row.textContent.toLowerCase();const okText=!q||text.includes(q);const okSig=!sig||text.includes(sig);row.style.display=okText&&okSig?'':'none'})}if(search)search.addEventListener('input',filterRows);if(signal)signal.addEventListener('change',filterRows);if(clear)clear.addEventListener('click',()=>{if(search)search.value='';if(signal)signal.value='';filterRows()})});""",
+        """document.addEventListener('DOMContentLoaded',()=>{const seaTabs=[...document.querySelectorAll('[data-sea-target]')];const seaPanels=[...document.querySelectorAll('.sea-view-panel')];function selectSea(target,updateHash=true){seaTabs.forEach(tab=>{const active=tab.dataset.seaTarget===target;tab.classList.toggle('active',active);tab.setAttribute('aria-selected',active?'true':'false')});seaPanels.forEach(panel=>{const active=panel.id===target;panel.classList.toggle('active',active);panel.hidden=!active});if(updateHash){history.replaceState(null,'','#'+(target==='sea6-summary-panel'?'sea6-summary':target))}}if(seaTabs.length){const hash=location.hash.replace('#','');const initial=hash==='sea6-summary'?'sea6-summary-panel':(seaPanels.some(panel=>panel.id===hash)?hash:'sea6-summary-panel');selectSea(initial,false);seaTabs.forEach(tab=>tab.addEventListener('click',event=>{event.preventDefault();selectSea(tab.dataset.seaTarget,true)}))}const params=new URLSearchParams(location.search);const current=params.get('view')==='table'?'table':'cards';if(current==='table'){document.body.classList.add('table-mode')}document.querySelectorAll('.view-toggle a').forEach(link=>{const url=new URL(link.href,location.href);const mode=url.searchParams.get('view')==='table'?'table':'cards';if(mode===current){link.classList.add('active');link.setAttribute('aria-current','true')}else{link.classList.remove('active');link.setAttribute('aria-current','false')}});const search=document.getElementById('trackerSearch');const signal=document.getElementById('signalFilter');const clear=document.getElementById('clearTrackerFilters');function filterRows(){const q=(search&&search.value||'').toLowerCase();const sig=(signal&&signal.value||'').toLowerCase();document.querySelectorAll('.data-table tbody tr').forEach(row=>{const text=row.textContent.toLowerCase();const okText=!q||text.includes(q);const okSig=!sig||text.includes(sig);row.style.display=okText&&okSig?'':'none'})}if(search)search.addEventListener('input',filterRows);if(signal)signal.addEventListener('change',filterRows);if(clear)clear.addEventListener('click',()=>{if(search)search.value='';if(signal)signal.value='';filterRows()})});""",
     )
 
 

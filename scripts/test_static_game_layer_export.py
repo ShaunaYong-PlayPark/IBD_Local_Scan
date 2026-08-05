@@ -332,6 +332,13 @@ def main():
 
             assert_true("Meeting: 04 Aug 2026" in latest_html, "meeting date should come from game layer")
             assert_true("SEA6 Summary" in latest_html, "SEA6 summary should render")
+            assert_true(latest_html.index("SEA6 Summary") < latest_html.index("Current snapshot"), "SEA6 Summary should be the first report view")
+            assert_true("SEA6 Gaming Market" in latest_html, "latest brief should use SEA6-neutral heading")
+            assert_true("Singapore Gaming Market" not in latest_html, "Singapore should not be the default visible market heading")
+            assert_true('data-sea-target="sea6-summary-panel"' in latest_html, "SEA6 tab should control the summary panel")
+            for country_code in ("sg", "my", "ph", "id", "th", "vn"):
+                assert_true(f'data-sea-target="sea-{country_code}"' in latest_html, f"{country_code} tab should control a country panel")
+            assert_true(".sea-country-tabs{position:sticky" in (docs / "assets" / "static-dashboard.css").read_text(encoding="utf-8"), "country tab bar should be sticky")
             for country_name in ("Singapore", "Malaysia", "Philippines", "Indonesia", "Thailand", "Vietnam"):
                 assert_true(country_name in latest_html, f"{country_name} country view should render")
             assert_true("03 Aug 2026" in latest_html, "SEA ranking data-as-of date should render")
