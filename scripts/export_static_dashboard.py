@@ -585,8 +585,19 @@ def sea_game_is_included(row):
     return revenue >= 3000 or (ranked and revenue >= 1000)
 
 
-def included_sea_games(sea_games):
-    return [row for row in sea_games if sea_game_is_included(row)]
+def included_sea_games(sea_games, report_rows=None):
+    candidates = [row for row in sea_games if sea_game_is_included(row)]
+    if report_rows is None:
+        return candidates
+    final_mobile_keys = {
+        normalized_key(title_for(row))
+        for row in report_rows
+        if row.get("report_classification") != "pc_only"
+    }
+    return [
+        row for row in candidates
+        if normalized_key(row.get("game_title") or row.get("original_title")) in final_mobile_keys
+    ]
 
 
 def sea_country_summary(sea_games):
@@ -611,7 +622,6 @@ def sea_summary(sea_games):
             "sea_st_downloads": 0,
             "ranking_data_as_of": "",
             "game_count": 0,
-            "multi_country_game_count": 0,
             "top_country_by_revenue": "",
             "top_country_by_downloads": "",
             "country_summaries": sea_country_summary([]),
@@ -627,7 +637,6 @@ def sea_summary(sea_games):
         "sea_st_downloads": sum(safe_float(row.get("sea_st_downloads")) for row in included),
         "ranking_data_as_of": ranked[0].get("ranking_data_as_of", ""),
         "game_count": len(included),
-        "multi_country_game_count": sum(1 for row in included if len([country for country in row.get("countries_detected", "").split(", ") if country]) >= 2),
         "top_country_by_revenue": max(country_summaries, key=lambda country: country_summaries[country]["sea_st_gross_revenue"]),
         "top_country_by_downloads": max(country_summaries, key=lambda country: country_summaries[country]["sea_st_downloads"]),
         "country_summaries": country_summaries,
@@ -779,11 +788,20 @@ def page_shell(title, active, body, rows, schedule, metadata):
       const tabs = [...document.querySelectorAll('[data-sea-target]')];
       const nonTabContent = document.querySelector('.sea-non-tab-content');
       if (!tabs.length || !nonTabContent) return;
+      const marketTitle = document.getElementById('market-title');
+      const marketSubtitle = document.getElementById('market-subtitle');
+      const marketNames = {{'sea6-summary-panel': 'SEA6', 'sea-sg': 'Singapore', 'sea-my': 'Malaysia', 'sea-ph': 'Philippines', 'sea-id': 'Indonesia', 'sea-th': 'Thailand', 'sea-vn': 'Vietnam'}};
+      const updateMarketHeading = (target) => {{
+        const name = marketNames[target] || 'SEA6';
+        if (marketTitle) marketTitle.textContent = `${{name}} Gaming Market`;
+        if (marketSubtitle) marketSubtitle.textContent = name === 'SEA6' ? 'Regional view of the latest SEA6 market scan.' : 'Country view of included mobile games, game announcements, and industry signals.';
+      }};
       const syncNonTabContent = (target) => {{
         const hash = location.hash.replace('#', '');
         nonTabContent.hidden = (target || hash) !== '' && (target || hash) !== 'sea6-summary' && (target || hash) !== 'sea6-summary-panel';
       }};
-      tabs.forEach((tab) => tab.addEventListener('click', () => syncNonTabContent(tab.dataset.seaTarget)));
+      tabs.forEach((tab) => tab.addEventListener('click', () => {{ updateMarketHeading(tab.dataset.seaTarget); syncNonTabContent(tab.dataset.seaTarget); }}));
+      updateMarketHeading(location.hash === '#sea6-summary' ? 'sea6-summary-panel' : (location.hash.replace('#', '') || 'sea6-summary-panel'));
       syncNonTabContent();
     }});
   </script>
@@ -791,10 +809,12 @@ def page_shell(title, active, body, rows, schedule, metadata):
 </html>"""
 
 
-def page_header(eyebrow, title, desc="", actions=""):
+def page_header(eyebrow, title, desc="", actions="", title_id="", desc_id=""):
     action_html = f'\n  <div class="page-actions">{actions}</div>' if actions else ''
+    title_attr = f' id="{escape(title_id)}"' if title_id else ''
+    desc_attr = f' id="{escape(desc_id)}"' if desc_id else ''
     return f"""<section class="page-header">
-  <div><em>{escape(eyebrow)}</em><h1>{escape(title)}</h1>{f'<p>{escape(desc)}</p>' if desc else ''}</div>{action_html}
+  <div><em>{escape(eyebrow)}</em><h1{title_attr}>{escape(title)}</h1>{f'<p{desc_attr}>{escape(desc)}</p>' if desc else ''}</div>{action_html}
 </section>"""
 
 
@@ -926,7 +946,11 @@ def news_affects_country(row, country):
 
 
 def country_news_rows(news_context, country):
-    return [row for row in news_context if news_affects_country(row, country)]
+    return [
+        row for row in news_context
+        if news_affects_country(row, country)
+        or not any(news_affects_country(row, other) for other in ("SG", "MY", "PH", "ID", "TH", "VN"))
+    ]
 
 
 def regional_news_rows(news_context):
@@ -939,7 +963,7 @@ def regional_news_rows(news_context):
 
 
 def sea_regional_section(sea_games, report_rows, news_context=None):
-    included = included_sea_games(sea_games)
+    included = included_sea_games(sea_games, report_rows)
     if not included:
         return ""
     summary = sea_summary(included)
@@ -974,7 +998,7 @@ def sea_regional_section(sea_games, report_rows, news_context=None):
     return f'''<section class="brief-section sea-regional-section">
   <div class="sea-view-panel sea-summary-panel active" id="sea6-summary-panel">
   <div class="section-heading"><div><h2 id="sea6-summary">SEA6 Summary</h2><p>Regional view of included new mobile games across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div><span class="sea-ranking-note">Ranking data as of <b>{escape(ranking_as_of)}</b></span></div>
-  <div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(summary["sea_st_gross_revenue"]))}</b><em>Included new games only</em></span><span><small>SEA6 ST Downloads</small><b>{escape(number(summary["sea_st_downloads"]))}</b><em>Included new games only</em></span><span><small>Included new mobile games</small><b>{summary["game_count"]}</b></span><span><small>Games in 2+ countries</small><b>{summary["multi_country_game_count"]}</b></span><span><small>Top revenue country</small><b>{escape(summary["top_country_by_revenue"])}</b></span><span><small>Top download country</small><b>{escape(summary["top_country_by_downloads"])}</b></span></div>
+  <div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(summary["sea_st_gross_revenue"]))}</b><em>Included new games only</em></span><span><small>SEA6 ST Downloads</small><b>{escape(number(summary["sea_st_downloads"]))}</b><em>Included new games only</em></span><span><small>Included new mobile games</small><b>{summary["game_count"]}</b></span><span><small>Top revenue country</small><b>{escape(summary["top_country_by_revenue"])}</b></span><span><small>Top download country</small><b>{escape(summary["top_country_by_downloads"])}</b></span></div>
   <h3 class="signal-heading">Top Regional Games <span>One row per game, ranked by combined SEA6 ST Gross Revenue.</span></h3>
   <div class="data-table sea-regional-table"><table><thead><tr><th>English title</th><th>Countries appeared in</th><th>SEA6 ST Gross Revenue</th><th>SEA6 ST Downloads</th><th>Top revenue country</th><th>Signal label</th></tr></thead><tbody>{"".join(table_rows)}</tbody></table></div>
   {regional_news}
@@ -1232,6 +1256,11 @@ def news_context_card(row, label):
     matched = row.get("matched_report_game")
     reason = row.get("editor_note") or row.get("inclusion_reason") or "Qualified through Game News Radar context rules."
     url = row.get("url") or "#"
+    country_names = {"SG": "Singapore", "MY": "Malaysia", "PH": "Philippines", "ID": "Indonesia", "TH": "Thailand", "VN": "Vietnam"}
+    affected = row.get("affected_countries") or row.get("countries") or ""
+    if not affected:
+        affected_codes = [code for code in country_names if news_affects_country(row, code)]
+        affected = ", ".join(country_names[code] for code in affected_codes) if affected_codes else "SEA6 / all countries"
     matched_html = f'<p><b>Matched game:</b> {escape(matched)}</p>' if matched else ""
     link_html = f'<a href="{escape(url)}" target="_blank" rel="noopener">View source</a>' if url != "#" else ""
     parts = [
@@ -1242,7 +1271,7 @@ def news_context_card(row, label):
     ]
     if matched_html:
         parts.append(f"  {matched_html}")
-    parts.extend([f"  <p>{escape(reason)}</p>", f"  {link_html}" if link_html else "", "</article>"])
+    parts.extend([f"  <p><b>Affected countries:</b> {escape(affected)}</p>", f"  <p>{escape(reason)}</p>", f"  {link_html}" if link_html else "", "</article>"])
     return "\n".join(part for part in parts if part)
 
 
@@ -1287,6 +1316,8 @@ def latest_page(rows, schedule, metadata, view="cards", news_context=None, sea_g
             "Market Brief",
             "SEA6 Gaming Market",
             "Regional view of the latest SEA6 market scan.",
+            title_id="market-title",
+            desc_id="market-subtitle",
         )
         + (sea_first_body if sea_section else legacy_fallback)
     )
@@ -1301,11 +1332,14 @@ def proof_run_records():
         if not folder.is_dir():
             continue
         payload_path = folder / "final-report.json"
+        if not payload_path.exists():
+            payload_path = folder / "data" / "final-report.json"
         brief_path = folder / "latest-brief.html"
         if not payload_path.exists() or not brief_path.exists():
             continue
         payload = read_json(payload_path, {})
         proof_rows = payload.get("rows") or []
+        sea_payload = payload.get("sea_summary") or {}
         proof_metadata = payload.get("metadata") or {}
         proof_schedule = payload.get("schedule") or {}
         start, end = report_period(proof_rows, proof_schedule)
@@ -1319,6 +1353,10 @@ def proof_run_records():
                 "data_as_of": data_as_of(proof_metadata, proof_rows),
                 "row_count": len(proof_rows),
                 "news_count": len(payload.get("news_context") or []),
+                "sea_game_count": sea_payload.get("game_count", 0),
+                "sea_revenue": sea_payload.get("sea_st_gross_revenue", 0),
+                "sea_downloads": sea_payload.get("sea_st_downloads", 0),
+                "ranking_data_as_of": display_date(sea_payload.get("ranking_data_as_of")) or "N/A",
                 "meeting_key": folder.name,
             }
         )
@@ -1338,11 +1376,15 @@ def proof_archive_cards(records):
   <div class="archive-main">
     <span class="status-chip neutral">Proof run</span>
     <h3>{escape(record["meeting"])} mock report</h3>
-    <p>{escape(record["period"])}</p>
+    <p>Report period: {escape(record["period"])}</p>
   </div>
   <div class="archive-meta">
     <span>Data as of: {escape(record["data_as_of"])}</span>
-    <span>{record["row_count"]} games &middot; {record["news_count"]} news items</span>
+    <span>Ranking data as of: {escape(record["ranking_data_as_of"])}</span>
+    <span>{record["sea_game_count"]} included SEA6 new mobile games</span>
+    <span>SEA6 ST Gross Revenue: {escape(money(record["sea_revenue"]))}</span>
+    <span>SEA6 ST Downloads: {escape(number(record["sea_downloads"]))}</span>
+    <span>Countries covered: SG, MY, PH, ID, TH, VN</span>
     <a class="btn primary" href="{escape(record["href"])}">Open brief</a>
   </div>
 </article>"""
@@ -1435,7 +1477,7 @@ def write_rows_csv(path, rows):
 def write_data(rows, metadata, schedule, weekly_summary=None, news_context=None, sea_games=None):
     DATA.mkdir(parents=True, exist_ok=True)
     metadata = normalized_metadata(metadata, rows)
-    sea_payload = sea_summary(sea_games or [])
+    sea_payload = sea_summary(included_sea_games(sea_games or [], rows))
     write_text(
         DATA / "final-report.json",
         json.dumps(

@@ -36,22 +36,30 @@
   <div class="archive-main">
     <span class="status-chip neutral">Proof run</span>
     <h3>21 Jul 2026 mock report</h3>
-    <p>07 Jul 2026 to 20 Jul 2026</p>
+    <p>Report period: 07 Jul 2026 to 20 Jul 2026</p>
   </div>
   <div class="archive-meta">
     <span>Data as of: 20 Jul 2026</span>
-    <span>8 games &middot; 3 news items</span>
+    <span>Ranking data as of: 21 Jul 2026</span>
+    <span>5 included SEA6 new mobile games</span>
+    <span>SEA6 ST Gross Revenue: $961,404</span>
+    <span>SEA6 ST Downloads: 848,871</span>
+    <span>Countries covered: SG, MY, PH, ID, TH, VN</span>
     <a class="btn primary" href="proof-runs/2026-07-21/latest-brief.html">Open brief</a>
   </div>
 </article><article class="archive-card reading-card">
   <div class="archive-main">
     <span class="status-chip neutral">Proof run</span>
     <h3>07 Jul 2026 mock report</h3>
-    <p>23 Jun 2026 to 06 Jul 2026</p>
+    <p>Report period: 23 Jun 2026 to 06 Jul 2026</p>
   </div>
   <div class="archive-meta">
     <span>Data as of: 13 Jul 2026</span>
-    <span>5 games &middot; 3 news items</span>
+    <span>Ranking data as of: 07 Jul 2026</span>
+    <span>5 included SEA6 new mobile games</span>
+    <span>SEA6 ST Gross Revenue: $1,797,344</span>
+    <span>SEA6 ST Downloads: 867,386</span>
+    <span>Countries covered: SG, MY, PH, ID, TH, VN</span>
     <a class="btn primary" href="proof-runs/2026-07-07/latest-brief.html">Open brief</a>
   </div>
 </article></div></section><aside class="combined-timeline"><h2>Upcoming / In progress</h2><div class="timeline-list compact"><article class="timeline-item"><div class="timeline-date"><span>Next meeting</span><b>04 Aug 2026</b></div><div class="timeline-detail"><h3>14 Jul 2026 to 03 Aug 2026</h3><p>Weekly extraction data for this window remains staging until the meeting-day final report is generated.</p></div></article></div></aside></div></main>
@@ -62,11 +70,20 @@
       const tabs = [...document.querySelectorAll('[data-sea-target]')];
       const nonTabContent = document.querySelector('.sea-non-tab-content');
       if (!tabs.length || !nonTabContent) return;
+      const marketTitle = document.getElementById('market-title');
+      const marketSubtitle = document.getElementById('market-subtitle');
+      const marketNames = {'sea6-summary-panel': 'SEA6', 'sea-sg': 'Singapore', 'sea-my': 'Malaysia', 'sea-ph': 'Philippines', 'sea-id': 'Indonesia', 'sea-th': 'Thailand', 'sea-vn': 'Vietnam'};
+      const updateMarketHeading = (target) => {
+        const name = marketNames[target] || 'SEA6';
+        if (marketTitle) marketTitle.textContent = `${name} Gaming Market`;
+        if (marketSubtitle) marketSubtitle.textContent = name === 'SEA6' ? 'Regional view of the latest SEA6 market scan.' : 'Country view of included mobile games, game announcements, and industry signals.';
+      };
       const syncNonTabContent = (target) => {
         const hash = location.hash.replace('#', '');
         nonTabContent.hidden = (target || hash) !== '' && (target || hash) !== 'sea6-summary' && (target || hash) !== 'sea6-summary-panel';
       };
-      tabs.forEach((tab) => tab.addEventListener('click', () => syncNonTabContent(tab.dataset.seaTarget)));
+      tabs.forEach((tab) => tab.addEventListener('click', () => { updateMarketHeading(tab.dataset.seaTarget); syncNonTabContent(tab.dataset.seaTarget); }));
+      updateMarketHeading(location.hash === '#sea6-summary' ? 'sea6-summary-panel' : (location.hash.replace('#', '') || 'sea6-summary-panel'));
       syncNonTabContent();
     });
   </script>

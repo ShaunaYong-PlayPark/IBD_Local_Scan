@@ -137,6 +137,18 @@ def main():
                 meeting_dir / "game_report_layer.csv",
                 [
                     {
+                        "report_classification": "mobile_only",
+                        "meeting_date": "2026-08-04",
+                        "report_start_date": "2026-07-21",
+                        "report_end_date": "2026-08-01",
+                        "unified_name": "SEA Shared RPG",
+                        "english_report_name": "SEA Shared RPG",
+                        "unified_id": "sea-shared-rpg",
+                        "sg_revenue_gross": "5000",
+                        "sg_downloads": "1000",
+                        "sg_release_date_reference": "2026-07-22",
+                    },
+                    {
                         "report_classification": "mobile_led_cross_platform",
                         "meeting_date": "2026-08-04",
                         "report_start_date": "2026-07-21",
@@ -381,11 +393,11 @@ def main():
                 assert_true(pc_row["SG Downloads"] == "", "PC-only rows should not export SG downloads")
                 assert_true(pc_row["Top 3 Markets"] == "", "PC-only rows should not export SEA markets")
                 assert_true(pc_row["SG App Store Ranks"] == "", "PC-only rows should not export app store ranks")
-            assert_true(len(payload["rows"]) == 3, "final JSON should use qualifying game layer rows")
+            assert_true(len(payload["rows"]) == 4, "final JSON should use qualifying game layer rows")
             assert_true(len(payload["news_context"]) == 1, "final JSON should use reviewed news rows")
             assert_true(payload["sea_summary"]["ranking_data_as_of"] == "2026-08-03", "SEA summary ranking date should be exported")
             assert_true(payload["sea_games"][0]["game_title"] == "SEA Shared RPG", "SEA games should be exported")
-            assert_true(len(exported_rows) == 3, "final CSV export should match qualifying game layer rows")
+            assert_true(len(exported_rows) == 4, "final CSV export should match qualifying game layer rows")
     finally:
         exporter.DOCS = originals["docs"]
         exporter.ASSETS = originals["assets"]

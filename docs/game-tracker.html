@@ -45,11 +45,20 @@
       const tabs = [...document.querySelectorAll('[data-sea-target]')];
       const nonTabContent = document.querySelector('.sea-non-tab-content');
       if (!tabs.length || !nonTabContent) return;
+      const marketTitle = document.getElementById('market-title');
+      const marketSubtitle = document.getElementById('market-subtitle');
+      const marketNames = {'sea6-summary-panel': 'SEA6', 'sea-sg': 'Singapore', 'sea-my': 'Malaysia', 'sea-ph': 'Philippines', 'sea-id': 'Indonesia', 'sea-th': 'Thailand', 'sea-vn': 'Vietnam'};
+      const updateMarketHeading = (target) => {
+        const name = marketNames[target] || 'SEA6';
+        if (marketTitle) marketTitle.textContent = `${name} Gaming Market`;
+        if (marketSubtitle) marketSubtitle.textContent = name === 'SEA6' ? 'Regional view of the latest SEA6 market scan.' : 'Country view of included mobile games, game announcements, and industry signals.';
+      };
       const syncNonTabContent = (target) => {
         const hash = location.hash.replace('#', '');
         nonTabContent.hidden = (target || hash) !== '' && (target || hash) !== 'sea6-summary' && (target || hash) !== 'sea6-summary-panel';
       };
-      tabs.forEach((tab) => tab.addEventListener('click', () => syncNonTabContent(tab.dataset.seaTarget)));
+      tabs.forEach((tab) => tab.addEventListener('click', () => { updateMarketHeading(tab.dataset.seaTarget); syncNonTabContent(tab.dataset.seaTarget); }));
+      updateMarketHeading(location.hash === '#sea6-summary' ? 'sea6-summary-panel' : (location.hash.replace('#', '') || 'sea6-summary-panel'));
       syncNonTabContent();
     });
   </script>
