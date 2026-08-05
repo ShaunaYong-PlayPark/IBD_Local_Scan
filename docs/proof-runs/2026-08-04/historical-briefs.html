@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Historical Briefs | IBD Market Intelligence</title>
+  <link rel="stylesheet" href="assets/static-dashboard.css">
+  <script defer src="assets/static-dashboard.js"></script>
+</head>
+<body class="dashboard-page page-historical">
+  <div class="app-shell top-nav-shell">
+    <header class="site-header">
+      <div class="brand top-brand">
+        <h1>IBD Market Intelligence</h1>
+        <p>SEA6 &middot; Mobile Launch Discovery</p>
+        <span>Report Dashboard</span>
+      </div>
+      <nav class="top-nav" aria-label="Primary navigation"><a class="" href="latest-brief.html" data-tooltip="Read the current executive market update." aria-current="false">Latest Brief</a><a class="on" href="historical-briefs.html" data-tooltip="Open past briefs and review meeting schedule." aria-current="page">Brief Archive</a><a class="" href="game-tracker.html" data-tooltip="Filter games mentioned across briefs." aria-current="false">Game Tracker</a></nav>
+    </header>
+    <div class="workspace">
+      <div class="fixed-secondary-row">
+      <div class="fixed-secondary-inner">
+      <header class="topbar compact-topbar slim-context-bar" aria-label="Brief context">
+        <div class="inline-context">
+          <b title="Brief Archive | Period: 21 Jul 2026 to 01 Aug 2026 | Meeting: 04 Aug 2026 | Data as of: 01 Aug 2026">Brief Archive</b>
+          <span title="Period: 21 Jul 2026 to 01 Aug 2026">21 Jul-01 Aug 2026</span>
+          <span title="Meeting: 04 Aug 2026">Meeting 04 Aug 2026</span>
+          <span title="Data as of: 01 Aug 2026">Data 01 Aug 2026</span>
+        </div>
+      </header>
+      </div>
+      </div>
+      <main id="main-content"><section class="page-header">
+  <div><em>Historical Briefs</em><h1>Brief archive</h1><p>Open past market briefs by reporting period. The current latest brief stays separate.</p></div>
+</section><section class="latest-archive-callout"><div><span class="status-chip strong">Current latest brief</span><h2>04 Aug 2026 latest report</h2><p>21 Jul 2026 to 01 Aug 2026 &middot; Data as of: 01 Aug 2026</p></div><a class="btn primary" href="latest-brief.html">Open latest brief</a></section><section class="archive-toolbar"><a class="btn primary" href="latest-brief.html">Latest</a><input type="search" id="archiveSearch" placeholder="Search briefs"></section><div class="combined-archive-grid"><section><h2>Historical reports</h2><div class="archive-grid"><article class="archive-card reading-card">
+  <div class="archive-main">
+    <span class="status-chip neutral">Proof run</span>
+    <h3>21 Jul 2026 mock report</h3>
+    <p>Report period: 07 Jul 2026 to 20 Jul 2026</p>
+  </div>
+  <div class="archive-meta">
+    <span>Data as of: 20 Jul 2026</span>
+    <span>Ranking data as of: 21 Jul 2026</span>
+    <span>5 included SEA6 new mobile games</span>
+    <span>SEA6 ST Gross Revenue: $961,404</span>
+    <span>SEA6 ST Downloads: 848,871</span>
+    <span>Countries covered: SG, MY, PH, ID, TH, VN</span>
+    <a class="btn primary" href="proof-runs/2026-07-21/latest-brief.html">Open brief</a>
+  </div>
+</article><article class="archive-card reading-card">
+  <div class="archive-main">
+    <span class="status-chip neutral">Proof run</span>
+    <h3>07 Jul 2026 mock report</h3>
+    <p>Report period: 23 Jun 2026 to 06 Jul 2026</p>
+  </div>
+  <div class="archive-meta">
+    <span>Data as of: 13 Jul 2026</span>
+    <span>Ranking data as of: 07 Jul 2026</span>
+    <span>5 included SEA6 new mobile games</span>
+    <span>SEA6 ST Gross Revenue: $1,797,344</span>
+    <span>SEA6 ST Downloads: 867,386</span>
+    <span>Countries covered: SG, MY, PH, ID, TH, VN</span>
+    <a class="btn primary" href="proof-runs/2026-07-07/latest-brief.html">Open brief</a>
+  </div>
+</article></div></section><aside class="combined-timeline"><h2>Upcoming / In progress</h2><div class="timeline-list compact"><article class="timeline-item"><div class="timeline-date"><span>Next meeting</span><b>04 Aug 2026</b></div><div class="timeline-detail"><h3>14 Jul 2026 to 03 Aug 2026</h3><p>Weekly extraction data for this window remains staging until the meeting-day final report is generated.</p></div></article></div></aside></div></main>
+    </div>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const tabs = [...document.querySelectorAll('[data-sea-target]')];
+      const nonTabContent = document.querySelector('.sea-non-tab-content');
+      if (!tabs.length || !nonTabContent) return;
+      const marketTitle = document.getElementById('market-title');
+      const marketSubtitle = document.getElementById('market-subtitle');
+      const marketNames = {'sea6-summary-panel': 'SEA6', 'sea-sg': 'Singapore', 'sea-my': 'Malaysia', 'sea-ph': 'Philippines', 'sea-id': 'Indonesia', 'sea-th': 'Thailand', 'sea-vn': 'Vietnam'};
+      const updateMarketHeading = (target) => {
+        const name = marketNames[target] || 'SEA6';
+        if (marketTitle) marketTitle.textContent = `${name} Gaming Market`;
+        if (marketSubtitle) marketSubtitle.textContent = name === 'SEA6' ? 'Regional view of the latest SEA6 market scan.' : 'Country view of included mobile games, game announcements, and industry signals.';
+      };
+      const syncNonTabContent = (target) => {
+        const hash = location.hash.replace('#', '');
+        nonTabContent.hidden = (target || hash) !== '' && (target || hash) !== 'sea6-summary' && (target || hash) !== 'sea6-summary-panel';
+      };
+      tabs.forEach((tab) => tab.addEventListener('click', () => { updateMarketHeading(tab.dataset.seaTarget); syncNonTabContent(tab.dataset.seaTarget); }));
+      updateMarketHeading(location.hash === '#sea6-summary' ? 'sea6-summary-panel' : (location.hash.replace('#', '') || 'sea6-summary-panel'));
+      syncNonTabContent();
+    });
+  </script>
+</body>
+</html>
