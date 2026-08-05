@@ -908,7 +908,37 @@ def sea_country_tabs_nav():
     return f'<nav class="sea-country-tabs" aria-label="SEA6 country views">{"".join(tabs)}</nav>'
 
 
-def sea_regional_section(sea_games, report_rows):
+def news_text(row):
+    return " ".join(str(row.get(field) or "") for field in ("title", "title_en", "editor_note", "inclusion_reason", "source")).lower()
+
+
+def news_affects_country(row, country):
+    aliases = {
+        "SG": ("singapore", "singaporean"),
+        "MY": ("malaysia", "malaysian"),
+        "PH": ("philippines", "filipino", "philippine"),
+        "ID": ("indonesia", "indonesian"),
+        "TH": ("thailand", "thai"),
+        "VN": ("vietnam", "vietnamese"),
+    }
+    explicit = " ".join(str(row.get(field) or "") for field in ("affected_countries", "countries", "region", "title", "title_en", "editor_note")).lower()
+    return any(alias in explicit for alias in aliases.get(country, ()))
+
+
+def country_news_rows(news_context, country):
+    return [row for row in news_context if news_affects_country(row, country)]
+
+
+def regional_news_rows(news_context):
+    rows = []
+    for row in news_context:
+        affected = sum(news_affects_country(row, country) for country in ("SG", "MY", "PH", "ID", "TH", "VN"))
+        if affected == 0 or affected >= 2:
+            rows.append(row)
+    return rows
+
+
+def sea_regional_section(sea_games, report_rows, news_context=None):
     included = included_sea_games(sea_games)
     if not included:
         return ""
@@ -932,16 +962,22 @@ def sea_regional_section(sea_games, report_rows):
         cards = "".join(sea_country_card(row, country, report_rows) for row in country_rows[:10]) or empty_state(
             f"No included new games in {name}", "No qualifying SEA6 commercial signal was detected for this country."
         )
+        country_news = news_context_section(
+            country_news_rows(news_context or [], country),
+            heading=f"{name} Game News Context",
+        ) if news_context else ""
         panels.append(
-            f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden><div class="section-heading"><div><h2>{name}</h2><p>Included new games with country-level Sensor Tower evidence.</p></div></div><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><div class="sea-country-grid">{cards}</div></section>'
+            f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden><div class="section-heading"><div><h2>{name}</h2><p>Country view using {name} Sensor Tower evidence only.</p></div></div><h3 class="country-section-label">Country Snapshot</h3><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><h3 class="country-section-label">Released Games</h3><div class="sea-country-grid">{cards}</div>{country_news}</section>'
         )
     ranking_as_of = display_date(summary["ranking_data_as_of"]) or "N/A"
+    regional_news = news_context_section(regional_news_rows(news_context or []), heading="SEA6 Game News Context", regional=True) if news_context else ""
     return f'''<section class="brief-section sea-regional-section">
   <div class="sea-view-panel sea-summary-panel active" id="sea6-summary-panel">
   <div class="section-heading"><div><h2 id="sea6-summary">SEA6 Summary</h2><p>Regional view of included new mobile games across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div><span class="sea-ranking-note">Ranking data as of <b>{escape(ranking_as_of)}</b></span></div>
   <div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(summary["sea_st_gross_revenue"]))}</b><em>Included new games only</em></span><span><small>SEA6 ST Downloads</small><b>{escape(number(summary["sea_st_downloads"]))}</b><em>Included new games only</em></span><span><small>Included new mobile games</small><b>{summary["game_count"]}</b></span><span><small>Games in 2+ countries</small><b>{summary["multi_country_game_count"]}</b></span><span><small>Top revenue country</small><b>{escape(summary["top_country_by_revenue"])}</b></span><span><small>Top download country</small><b>{escape(summary["top_country_by_downloads"])}</b></span></div>
   <h3 class="signal-heading">Top Regional Games <span>One row per game, ranked by combined SEA6 ST Gross Revenue.</span></h3>
   <div class="data-table sea-regional-table"><table><thead><tr><th>English title</th><th>Countries appeared in</th><th>SEA6 ST Gross Revenue</th><th>SEA6 ST Downloads</th><th>Top revenue country</th><th>Signal label</th></tr></thead><tbody>{"".join(table_rows)}</tbody></table></div>
+  {regional_news}
   </div>
   {"".join(panels)}
 </section>'''
@@ -1210,7 +1246,7 @@ def news_context_card(row, label):
     return "\n".join(part for part in parts if part)
 
 
-def news_context_section(news_context):
+def news_context_section(news_context, heading="Game News Context", regional=False):
     release_rows = [r for r in news_context if r.get("context_type") == "selected_game_release_news"]
     announcement_rows = [r for r in news_context if r.get("context_type") == "high_score_game_announcement"]
     industry_rows = [r for r in news_context if r.get("context_type") == "industry_trend"]
@@ -1226,8 +1262,9 @@ def news_context_section(news_context):
         "No high-score announcements for this report period",
         "Game Announcements only appear here when the radar score is high and the event date is inside the report period.",
     )
-    return f"""<section class="brief-section news-context-section">
-  <div class="section-heading"><div><h2>Game News Context</h2><p>Game News Radar items used as supporting context for the final brief. Releases support selected games only; announcements are ranked news signals for the report period.</p></div></div>
+    scope = "SEA6-wide or multi-country signals affecting the regional gaming landscape." if regional else "News signals relevant to this country view."
+    return f"""<section class="news-context-section country-news-context">
+  <div class="section-heading"><div><h3>{escape(heading)}</h3><p>{scope}</p></div></div>
   <h3 class="signal-heading">Industry Trends <span>High-signal, non-repeated trends affecting the games market.</span></h3>
   <div class="news-context-grid">{industry_cards}</div>
   <h3 class="signal-heading">Game Announcements <span>High-score future-release or major game news items.</span></h3>
@@ -1241,20 +1278,17 @@ def latest_page(rows, schedule, metadata, view="cards", news_context=None, sea_g
     news_context = news_context or []
     strong = sort_rows([r for r in rows if signal_group(r) == "strong"])
     emerging = sort_rows([r for r in rows if signal_group(r) != "strong"])
+    sea_section = sea_regional_section(sea_games or [], rows, news_context)
+    methodology = '<div class="sea-non-tab-content"><details class="methodology"><summary>Methodology and data notes</summary><p>SEA6 dashboards combine country-level Sensor Tower evidence into one game layer. Country tabs show only the selected country metrics. Release dates are evidence only and are not discovery gates.</p></details></div>'
+    legacy_fallback = '<div class="sea-non-tab-content">' + summary_cards(rows) + executive_summary(rows) + released_games_section(strong, emerging, view) + news_context_section(news_context) + methodology + '</div>'
+    sea_first_body = sea_section + methodology
     body = (
         page_header(
             "Market Brief",
             "SEA6 Gaming Market",
             "Regional view of the latest SEA6 market scan.",
         )
-        + sea_regional_section(sea_games or [], rows)
-        + '<div class="sea-non-tab-content">'
-        + summary_cards(rows)
-        + executive_summary(rows)
-        + released_games_section(strong, emerging, view)
-        + news_context_section(news_context)
-        + """<details class="methodology"><summary>Methodology and data notes</summary><p>Discovery uses app IDs first observed in SG Games Top Grossing history. Release dates are evidence only and are not discovery gates. Revenue is shown as estimated gross revenue from Sensor Tower where available.</p></details>"""
-        + '</div>'
+        + (sea_first_body if sea_section else legacy_fallback)
     )
     return page_shell("Latest Brief", "latest", body, rows, schedule, metadata)
 

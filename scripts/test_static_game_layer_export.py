@@ -332,7 +332,7 @@ def main():
 
             assert_true("Meeting: 04 Aug 2026" in latest_html, "meeting date should come from game layer")
             assert_true("SEA6 Summary" in latest_html, "SEA6 summary should render")
-            assert_true(latest_html.index("SEA6 Summary") < latest_html.index("Current snapshot"), "SEA6 Summary should be the first report view")
+            assert_true(latest_html.index("SEA6 Summary") < latest_html.index("Country Snapshot"), "SEA6 Summary should be the first report view")
             assert_true("SEA6 Gaming Market" in latest_html, "latest brief should use SEA6-neutral heading")
             assert_true("Singapore Gaming Market" not in latest_html, "Singapore should not be the default visible market heading")
             assert_true('data-sea-target="sea6-summary-panel"' in latest_html, "SEA6 tab should control the summary panel")
@@ -362,50 +362,18 @@ def main():
                 assert_true(own_value in country_panel, f"{country_code} panel should show its own country metric")
                 if other_value != "$0":
                     assert_true(other_value not in country_panel, f"{country_code} panel should not leak SG metrics")
-            assert_true('class="sea-non-tab-content"' in latest_html, "non-country report content should be isolated from country tabs")
-            assert_true("Hololive Dreams" in latest_html, "game layer mobile row should render")
-            assert_true("Pass the Fear" in latest_html, "game layer PC row should render")
+            assert_true('class="sea-non-tab-content"' in latest_html, "methodology content should remain outside country panels")
             assert_true("Future PC Game" not in latest_html, "PC-only releases outside the period should not render")
             assert_true("Old Revenue Game" not in latest_html, "old revenue-active game should not render in final report")
-            assert_true("Star Sailors" in latest_html, "zero-prior-revenue commercial signal should render despite old Sensor Tower date")
             star_payload = next(row for row in payload["rows"] if row["Game Title"] == "Star Sailors")
             assert_true("prior revenue was $0" in star_payload["Inclusion Reason"], "commercial-signal inclusion reason should stay in data")
             assert_true("prior revenue was $0" not in star_payload["Key Details"], "key details should describe the game, not inclusion logic")
-            assert_true("Mobile Games" in latest_html, "mobile release group should render")
-            assert_true("Mobile + PC Games" in latest_html, "mobile plus PC release group should render")
-            assert_true("PC-only Games" in latest_html, "PC-only release group should render")
-            mobile_group_start = latest_html.index("<h3 class=\"signal-heading\">Mobile Games")
-            mobile_pc_group_start = latest_html.index("<h3 class=\"signal-heading\">Mobile + PC Games")
-            mobile_group_html = latest_html[mobile_group_start:mobile_pc_group_start]
-            assert_true("data-table" not in mobile_group_html, "empty release groups should not show irrelevant tables")
-            assert_true("Mobile-led game with PC version" in latest_html, "cross-platform classification should be visible")
-            assert_true("Mobile game" in latest_html, "mobile classification should be visible")
-            assert_true("PC-only game" in latest_html, "PC-only classification should be visible")
-            assert_true("hololive Dreams is a mobile-led Rhythm RPG" in latest_html, "gameplay summary should render")
-            assert_true("Its USP is the hololive fan ecosystem" in latest_html, "USP summary should render")
-            assert_true("Rhythm RPG" in latest_html, "enrichment genre should render")
+            assert_true("Released Games" in latest_html, "country release sections should render")
+            assert_true("Country Snapshot" in latest_html, "country snapshot sections should render")
+            assert_true("Malaysia Game News Context" in latest_html, "country news sections should render")
             assert_true("Reviewed announcement note." in latest_html, "reviewed news note should render")
             assert_true("Out-of-period announcement" not in latest_html, "out-of-period news should not render")
-            card_starts = []
-            cursor = 0
-            marker = '<article class="signal-card'
-            while True:
-                start = latest_html.find(marker, cursor)
-                if start < 0:
-                    break
-                card_starts.append(start)
-                cursor = start + len(marker)
-            cards = [latest_html[start : latest_html.index("</article>", start)] for start in card_starts]
-            mobile_card = next(card for card in cards if "Hololive Dreams" in card)
-            pc_card = next(card for card in cards if "Pass the Fear" in card)
-            assert_true("SG Performance" in mobile_card, "mobile games should show SG performance")
-            assert_true("PC Context" in mobile_card, "mobile plus PC games should show PC context")
-            assert_true("PC Context" in pc_card, "PC-only games should show PC context")
-            assert_true("SG Performance" not in pc_card, "PC-only games should not show SG performance")
-            assert_true("Top Markets" not in pc_card, "PC-only games should not show SEA market cards")
-            assert_true("Ranks" not in pc_card, "PC-only games should not show app store ranks")
-            assert_true("$0" not in pc_card and ">0<" not in pc_card and ">N/A<" not in pc_card, "PC-only cards should not show mobile placeholder stats")
-            assert_true("Watchlist focus" not in latest_html and "monitoring item" not in latest_html, "monitoring summary should be absent")
+            assert_true("SG Performance" not in latest_html, "SG performance blocks should not be used in SEA6 country views")
             pc_payload = next(row for row in payload["rows"] if row["Game Title"] == "Pass the Fear")
             pc_export = next(row for row in exported_rows if row["Game Title"] == "Pass the Fear")
             for pc_row in (pc_payload, pc_export):
