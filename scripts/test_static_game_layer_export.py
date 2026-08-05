@@ -410,6 +410,14 @@ def main():
             assert_true("Unknown Prior Game" not in latest_html, "missing prior revenue must not render")
             assert_true("Animals Garden" not in {row["game_title"] for row in payload["sea_summary"]["top_games"]}, "known-existing game must not enter SEA summary")
             assert_true("SG" in latest_html and "MY" in latest_html, "SEA country revenue chips should render")
+            assert_true(
+                exporter.country_game_is_included(
+                    {"game_title": "Approved SG Game", "sg_revenue_gross": "0", "sg_revenue_prior_store": "100", "known_existing": "true"},
+                    "SG",
+                    [{"english_report_name": "Approved SG Game", "report_classification": "mobile_only", "main_report_mobile_candidate": "true"}],
+                ),
+                "approved SG final-report rows should remain eligible for the SG tab",
+            )
             for country_code, own_value, other_value in (("my", "$18,000", "$5,000"), ("th", "$0", "$5,000")):
                 panel_start = latest_html.index(f'id="sea-{country_code}"')
                 panel_end = latest_html.find('<section class="sea-view-panel', panel_start + 1)

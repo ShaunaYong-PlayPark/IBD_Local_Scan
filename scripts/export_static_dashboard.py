@@ -578,11 +578,25 @@ def source_sea_game_layer(rows, schedule):
 SEA6_COUNTRIES = ("SG", "MY", "PH", "ID", "TH", "VN")
 
 
-def country_game_is_included(row, country):
+def country_game_is_included(row, country, report_rows=None):
     prefix = country.lower()
     override = str(row.get("manual_inclusion_override") or "").strip().lower() in {"1", "true", "yes", "approved"}
     if override:
         return True
+    if country == "SG" and report_rows:
+        key = normalized_key(row.get("game_title") or row.get("original_title"))
+        if any(
+            normalized_key(
+                report_row.get("Game Title")
+                or report_row.get("English Display Title")
+                or report_row.get("english_report_name")
+                or report_row.get("unified_name")
+                or report_row.get("Original Title")
+            ) == key
+            and report_row.get("report_classification") != "pc_only"
+            for report_row in report_rows
+        ):
+            return True
     known_existing = str(row.get("known_existing") or "").strip().lower() in {"1", "true", "yes"}
     if known_existing:
         return False
@@ -596,7 +610,7 @@ def country_game_is_included(row, country):
 
 def included_country_games(sea_games, report_rows=None, country="SG"):
     """Return only games that qualify from the selected country's evidence."""
-    return [row for row in sea_games if country_game_is_included(row, country)]
+    return [row for row in sea_games if country_game_is_included(row, country, report_rows)]
 
 
 def included_sea_games(sea_games, report_rows=None):
