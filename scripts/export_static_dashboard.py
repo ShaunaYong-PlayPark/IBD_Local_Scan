@@ -919,7 +919,6 @@ def sea_country_card(row, country, report_rows):
     rank_html = "".join(
         f'<span class="metric-badge neutral">{label} #{escape(str(row.get(field) or "N/A"))}</span>'
         for label, field in (("iOS", f"{prefix}_ios_rank"), ("Android", f"{prefix}_android_rank"))
-        if row.get(field)
     )
     return f'''<article class="sea-country-card">
   <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(platforms)}</span></div>

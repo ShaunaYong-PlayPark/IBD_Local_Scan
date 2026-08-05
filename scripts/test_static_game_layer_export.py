@@ -326,8 +326,12 @@ def main():
                         "known_existing": "false",
                         "sg_revenue_gross": "5000",
                         "sg_revenue_prior_store": "0",
+                        "sg_ios_rank": "11",
+                        "sg_android_rank": "12",
                         "my_revenue_gross": "18000",
                         "my_revenue_prior_store": "0",
+                        "my_ios_rank": "22",
+                        "my_android_rank": "23",
                         "ph_revenue_gross": "2000",
                         "ph_revenue_prior_store": "0",
                         "ranking_data_as_of": "2026-08-03",
@@ -413,6 +417,19 @@ def main():
                 assert_true(own_value in country_panel, f"{country_code} panel should show its own country metric")
                 if other_value != "$0":
                     assert_true(other_value not in country_panel, f"{country_code} panel should not leak SG metrics")
+            sg_start = latest_html.index('id="sea-sg"')
+            sg_end = latest_html.find('<section class="sea-view-panel', sg_start + 1)
+            sg_panel = latest_html[sg_start:sg_end if sg_end >= 0 else None]
+            my_start = latest_html.index('id="sea-my"')
+            my_end = latest_html.find('<section class="sea-view-panel', my_start + 1)
+            my_panel = latest_html[my_start:my_end if my_end >= 0 else None]
+            assert_true("iOS #11" in sg_panel and "Android #12" in sg_panel, "Singapore should use SG ranks")
+            assert_true("iOS #22" in my_panel and "Android #23" in my_panel, "Malaysia should use MY ranks")
+            assert_true("iOS #11" not in my_panel and "Android #12" not in my_panel, "Malaysia must not reuse SG ranks")
+            missing_rank_card = exporter.sea_country_card(
+                {"game_title": "No Rank Game", "my_revenue_gross": "4000", "my_downloads": "10"}, "MY", []
+            )
+            assert_true("iOS #N/A" in missing_rank_card and "Android #N/A" in missing_rank_card, "missing country ranks should show N/A")
             ph_start = latest_html.index('id="sea-ph"')
             ph_end = latest_html.find('<section class="sea-view-panel', ph_start + 1)
             ph_panel = latest_html[ph_start:ph_end if ph_end >= 0 else None]
