@@ -597,9 +597,6 @@ def country_game_is_included(row, country, report_rows=None):
             for report_row in report_rows
         ):
             return True
-    known_existing = str(row.get("known_existing") or "").strip().lower() in {"1", "true", "yes"}
-    if known_existing:
-        return False
     revenue = safe_float(row.get(f"{prefix}_revenue_gross"))
     ranked = bool(row.get(f"{prefix}_ios_rank") or row.get(f"{prefix}_android_rank"))
     prior_value = str(row.get(f"{prefix}_revenue_prior_store") or "").strip()
@@ -1061,16 +1058,15 @@ def sea_regional_section(sea_games, report_rows, news_context=None):
         panels.append(
             f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden><div class="section-heading"><div><h2>{name}</h2><p>Country view using {name} Sensor Tower evidence only.</p></div></div><h3 class="country-section-label">Country Snapshot</h3><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><p class="rank-limitation-note">{escape(RANK_LIMITATION_NOTE)}</p><h3 class="country-section-label">Included Mobile Games</h3><div class="sea-country-grid">{cards}</div>{pc_signals}{country_news}</section>'
         )
-    ranking_as_of = display_date(summary["ranking_data_as_of"]) or "N/A"
     regional_news = news_context_section(regional_news_rows(news_context or []), heading="SEA6 Game News Context", regional=True) if news_context else ""
+    optional_regional_sections = "\n  ".join(section for section in (pc_signals, regional_news) if section)
+    optional_regional_html = f"\n  {optional_regional_sections}" if optional_regional_sections else ""
     return f'''<section class="brief-section sea-regional-section">
   <div class="sea-view-panel sea-summary-panel active" id="sea6-summary-panel">
-  <div class="section-heading"><div><h2 id="sea6-summary">SEA6 Summary</h2><p>Regional view of included new mobile games across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div><span class="sea-ranking-note">Ranking data as of <b>{escape(ranking_as_of)}</b></span></div>
+  <div class="section-heading"><div><h2 id="sea6-summary">SEA6 Summary</h2><p>Regional view of included new mobile games across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div></div>
   <div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(summary["sea_st_gross_revenue"]))}</b><em>Included new games only</em></span><span><small>SEA6 ST Downloads</small><b>{escape(number(summary["sea_st_downloads"]))}</b><em>Included new games only</em></span><span><small>Included new mobile games</small><b>{summary["game_count"]}</b></span><span><small>Top revenue country</small><b>{escape(summary["top_country_by_revenue"])}</b></span><span><small>Top download country</small><b>{escape(summary["top_country_by_downloads"])}</b></span></div>
   <h3 class="signal-heading">Top Regional Games <span>One row per game, ranked by combined SEA6 ST Gross Revenue.</span></h3>
-  <div class="data-table sea-regional-table"><table><thead><tr><th>English title</th><th>Countries appeared in</th><th>SEA6 ST Gross Revenue</th><th>SEA6 ST Downloads</th><th>Top revenue country</th><th>Signal label</th></tr></thead><tbody>{"".join(table_rows)}</tbody></table></div>
-  {pc_signals}
-  {regional_news}
+  <div class="data-table sea-regional-table"><table><thead><tr><th>English title</th><th>Countries appeared in</th><th>SEA6 ST Gross Revenue</th><th>SEA6 ST Downloads</th><th>Top revenue country</th><th>Signal label</th></tr></thead><tbody>{"".join(table_rows)}</tbody></table></div>{optional_regional_html}
   </div>
   {"".join(panels)}
 </section>'''
@@ -1425,7 +1421,6 @@ def proof_run_records():
                 "sea_game_count": sea_payload.get("game_count", 0),
                 "sea_revenue": sea_payload.get("sea_st_gross_revenue", 0),
                 "sea_downloads": sea_payload.get("sea_st_downloads", 0),
-                "ranking_data_as_of": display_date(sea_payload.get("ranking_data_as_of")) or "N/A",
                 "meeting_key": folder.name,
             }
         )
@@ -1449,7 +1444,6 @@ def proof_archive_cards(records):
   </div>
   <div class="archive-meta">
     <span>Data as of: {escape(record["data_as_of"])}</span>
-    <span>Ranking data as of: {escape(record["ranking_data_as_of"])}</span>
     <span>{record["sea_game_count"]} included SEA6 new mobile games</span>
     <span>SEA6 ST Gross Revenue: {escape(money(record["sea_revenue"]))}</span>
     <span>SEA6 ST Downloads: {escape(number(record["sea_downloads"]))}</span>

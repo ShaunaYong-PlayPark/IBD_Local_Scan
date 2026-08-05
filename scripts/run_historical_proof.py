@@ -56,7 +56,6 @@ def rewrite_proof_html(path, meeting_date, latest_date):
     period = f'{display_date(first.get("report_start_date"))} to {display_date(first.get("report_end_date"))}'
     meeting = display_date(first.get("meeting_date") or meeting_date)
     data_as_of = display_date((payload.get("metadata") or {}).get("sensor_tower_data_as_of_date") or first.get("report_end_date"))
-    ranking_data_as_of = display_date((payload.get("sea_summary") or {}).get("ranking_data_as_of")) or "N/A"
     latest = display_date(latest_date)
 
     html = path.read_text(encoding="utf-8")
@@ -72,11 +71,12 @@ def rewrite_proof_html(path, meeting_date, latest_date):
     )
     html = re.sub(
         r'<div class="inline-context">.*?</div>',
-        f'<div class="inline-context">\n          <b title="Historical Brief | Period: {period} | Meeting: {meeting} | Data as of: {data_as_of}">Historical Brief</b>\n          <span>Historical period: {period}</span>\n          <span>Meeting {meeting}</span>\n          <span>Data {data_as_of}</span>\n          <span>Ranking data {ranking_data_as_of}</span>\n          <span>Latest {latest}</span>\n        </div>',
+        f'<div class="inline-context">\n          <b title="Historical Brief | Period: {period} | Meeting: {meeting} | Data as of: {data_as_of}">Historical Brief</b>\n          <span>Historical period: {period}</span>\n          <span>Meeting {meeting}</span>\n          <span>Data {data_as_of}</span>\n          <span>Latest {latest}</span>\n        </div>',
         html,
         flags=re.S,
     )
     html = re.sub(r'<div><em>Market Brief</em><h1[^>]*>.*?</h1><p[^>]*>.*?</p></div>', f'<div><em>Historical Brief</em><h1 id="market-title">SEA6 Gaming Market</h1><p id="market-subtitle">Historical SEA6 regional view for {period}.</p></div>', html, flags=re.S)
+    html = html.replace("Regional view of the latest SEA6 market scan.", f"Historical SEA6 regional view for {period}.")
     html = html.replace('href="historical-briefs.html"', 'href="../../historical-briefs.html"')
     html = html.replace('href="game-tracker.html"', 'href="../../game-tracker.html"')
     html = html.replace('href="latest-brief.html"', 'href="../../latest-brief.html"')
@@ -132,6 +132,7 @@ def main(argv=None):
         news_args.append("--use-public-radar")
     run_step("news context layer", "build_game_news_context_layer.py", *news_args)
     run_step("news context review copy", "build_game_news_context_review.py", "--meeting-date", meeting_date)
+    run_step("SEA6 game layer", "build_sea_game_layer.py", "--meeting-date", meeting_date)
     run_step("static dashboard export", "export_static_dashboard.py", "--meeting-date", meeting_date)
     copy_outputs(meeting_date)
 

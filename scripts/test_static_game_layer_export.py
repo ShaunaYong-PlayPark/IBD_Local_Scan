@@ -106,6 +106,12 @@ def main():
         "manual approval must be able to override the default exclusion gate",
     )
     assert_true(
+        not exporter.country_game_is_included(
+            {"id_revenue_gross": "7000", "id_revenue_prior_store": "100", "known_existing": "true"}, "ID"
+        ),
+        "known existing games with non-zero prior country revenue must stay excluded",
+    )
+    assert_true(
         exporter.continuity_table_text(
             "Mobile version was first covered in the 21 Jul 2026 brief. This report adds the later Steam PC release."
         ) == "Mobile first covered in 21 Jul 2026 brief; later Steam PC release added here.",
@@ -344,7 +350,7 @@ def main():
                         "original_title": "Animals Garden",
                         "sea_st_gross_revenue": "5000",
                         "id_revenue_gross": "5000",
-                        "id_revenue_prior_store": "0",
+                        "id_revenue_prior_store": "100",
                         "known_existing": "true",
                         "meeting_date": "2026-08-04",
                     },
@@ -405,7 +411,6 @@ def main():
             assert_true('<nav class="top-nav"' in latest_html and 'href="latest-brief.html"' in latest_html, "Latest Brief should remain in primary navigation")
             for country_name in ("Singapore", "Malaysia", "Philippines", "Indonesia", "Thailand", "Vietnam"):
                 assert_true(country_name in latest_html, f"{country_name} country view should render")
-            assert_true("03 Aug 2026" in latest_html, "SEA ranking data-as-of date should render")
             assert_true("SEA Shared RPG" in latest_html, "SEA top game should render")
             assert_true("Animals Garden" not in latest_html, "known-existing Animals Garden must not render")
             assert_true("Unknown Prior Game" not in latest_html, "missing prior revenue must not render")
