@@ -339,16 +339,26 @@ def main():
             for country_code in ("sg", "my", "ph", "id", "th", "vn"):
                 assert_true(f'data-sea-target="sea-{country_code}"' in latest_html, f"{country_code} tab should control a country panel")
             css = (docs / "assets" / "static-dashboard.css").read_text(encoding="utf-8")
-            assert_true("--dashboard-header-height" in css and "--dashboard-tabs-height" in css, "fixed stack should define shared offsets")
+            assert_true("--dashboard-header-height" in css and "--dashboard-secondary-height" in css, "fixed stack should define shared offsets")
             assert_true(".site-header{position:fixed!important;top:0!important;left:0!important;right:0!important" in css, "main navigation should be the top fixed layer")
-            assert_true(".slim-context-bar,.compact-topbar{position:fixed!important;top:var(--dashboard-header-height)!important" in css, "brief context should follow the main navigation")
-            assert_true(".sea-country-tabs{position:fixed!important;top:var(--dashboard-tabs-top)!important" in css, "country tab bar should follow the brief context")
-            assert_true(".dashboard-page.page-latest main#main-content{padding-top:calc(var(--dashboard-header-height) + var(--dashboard-context-height) + var(--dashboard-tabs-height) + 16px)!important}" in css, "latest content should clear the fixed stack")
+            assert_true(".fixed-secondary-row{position:fixed!important;top:var(--dashboard-header-height)!important" in css, "context and country tabs should share the second fixed row")
+            assert_true(".sea-country-tabs{position:static!important" in css, "country tab bar should sit inside the fixed second row")
+            assert_true(".dashboard-page main#main-content{padding-top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 16px)!important}" in css, "content should clear the compact fixed stack")
+            assert_true("Previous Briefs" not in latest_html, "duplicate previous-brief action should be removed from the context row")
+            assert_true('<nav class="top-nav"' in latest_html and 'href="latest-brief.html"' in latest_html, "Latest Brief should remain in primary navigation")
             for country_name in ("Singapore", "Malaysia", "Philippines", "Indonesia", "Thailand", "Vietnam"):
                 assert_true(country_name in latest_html, f"{country_name} country view should render")
             assert_true("03 Aug 2026" in latest_html, "SEA ranking data-as-of date should render")
             assert_true("SEA Shared RPG" in latest_html, "SEA top game should render")
             assert_true("SG" in latest_html and "MY" in latest_html, "SEA country revenue chips should render")
+            for country_code, own_value, other_value in (("my", "$18,000", "$5,000"), ("th", "$0", "$5,000")):
+                panel_start = latest_html.index(f'id="sea-{country_code}"')
+                panel_end = latest_html.find('<section class="sea-view-panel', panel_start + 1)
+                country_panel = latest_html[panel_start:panel_end if panel_end >= 0 else None]
+                assert_true(own_value in country_panel, f"{country_code} panel should show its own country metric")
+                if other_value != "$0":
+                    assert_true(other_value not in country_panel, f"{country_code} panel should not leak SG metrics")
+            assert_true('class="sea-non-tab-content"' in latest_html, "non-country report content should be isolated from country tabs")
             assert_true("Hololive Dreams" in latest_html, "game layer mobile row should render")
             assert_true("Pass the Fear" in latest_html, "game layer PC row should render")
             assert_true("Future PC Game" not in latest_html, "PC-only releases outside the period should not render")

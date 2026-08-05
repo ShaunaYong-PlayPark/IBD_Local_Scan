@@ -18,6 +18,7 @@
       <nav class="top-nav" aria-label="Primary navigation"><a class="on" href="latest-brief.html" data-tooltip="Read the current executive market update." aria-current="page">Latest Brief</a><a class="" href="historical-briefs.html" data-tooltip="Open past briefs and review meeting schedule." aria-current="false">Brief Archive</a><a class="" href="game-tracker.html" data-tooltip="Filter games mentioned across briefs." aria-current="false">Game Tracker</a></nav>
     </header>
     <div class="workspace">
+      <div class="fixed-secondary-row">
       <header class="topbar compact-topbar slim-context-bar" aria-label="Brief context">
         <div class="inline-context">
           <b>Latest Brief</b>
@@ -25,15 +26,11 @@
           <span>Meeting: 04 Aug 2026</span>
           <span>Data as of: 01 Aug 2026</span>
         </div>
-        <div class="top-actions compact-actions">
-          <a class="btn ghost" href="historical-briefs.html">Previous Briefs</a>
-          <a class="btn primary" href="latest-brief.html">Latest Brief</a>
-        </div>
       </header>
+      <nav class="sea-country-tabs" aria-label="SEA6 country views"><a class="sea-tab active" href="#sea6-summary" data-sea-target="sea6-summary-panel" aria-selected="true">SEA6 Summary</a><a class="sea-tab" href="#sea-sg" data-sea-target="sea-sg" aria-selected="false">Singapore</a><a class="sea-tab" href="#sea-my" data-sea-target="sea-my" aria-selected="false">Malaysia</a><a class="sea-tab" href="#sea-ph" data-sea-target="sea-ph" aria-selected="false">Philippines</a><a class="sea-tab" href="#sea-id" data-sea-target="sea-id" aria-selected="false">Indonesia</a><a class="sea-tab" href="#sea-th" data-sea-target="sea-th" aria-selected="false">Thailand</a><a class="sea-tab" href="#sea-vn" data-sea-target="sea-vn" aria-selected="false">Vietnam</a></nav></div>
       <main id="main-content"><section class="page-header">
   <div><em>Market Brief</em><h1>SEA6 Gaming Market</h1><p>Regional view of the latest SEA6 market scan.</p></div>
 </section><section class="brief-section sea-regional-section">
-  <nav class="sea-country-tabs" aria-label="SEA6 country views"><a class="sea-tab active" href="#sea6-summary" data-sea-target="sea6-summary-panel" aria-selected="true">SEA6 Summary</a><a class="sea-tab" href="#sea-sg" data-sea-target="sea-sg" aria-selected="false">Singapore</a><a class="sea-tab" href="#sea-my" data-sea-target="sea-my" aria-selected="false">Malaysia</a><a class="sea-tab" href="#sea-ph" data-sea-target="sea-ph" aria-selected="false">Philippines</a><a class="sea-tab" href="#sea-id" data-sea-target="sea-id" aria-selected="false">Indonesia</a><a class="sea-tab" href="#sea-th" data-sea-target="sea-th" aria-selected="false">Thailand</a><a class="sea-tab" href="#sea-vn" data-sea-target="sea-vn" aria-selected="false">Vietnam</a></nav>
   <div class="sea-view-panel sea-summary-panel active" id="sea6-summary-panel">
   <div class="section-heading"><div><h2 id="sea6-summary">SEA6 Summary</h2><p>Regional view of included new mobile games across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div><span class="sea-ranking-note">Ranking data as of <b>03 Aug 2026</b></span></div>
   <div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>$1,013,448</b><em>Included new games only</em></span><span><small>SEA6 ST Downloads</small><b>1,060,700</b><em>Included new games only</em></span><span><small>Included new mobile games</small><b>57</b></span><span><small>Games in 2+ countries</small><b>53</b></span><span><small>Top revenue country</small><b>TH</b></span><span><small>Top download country</small><b>TH</b></span></div>
@@ -521,7 +518,7 @@
   <div class="meta-chip-row"></div>
 <p class="sea-country-note">Top revenue market for this game.</p>
 </article></div></section>
-</section><section class="summary-card-grid"><article class="summary-card snapshot"><small>Current snapshot</small><h3>8 included launches</h3><p>0 high / 8 early</p></article><article class="summary-card opportunity"><small>Top opportunity</small><h3>hololive Dreams</h3><p>$180,003</p></article><article class="summary-card action"><small>Singapore ST Gross Revenue</small><h3>$238,535</h3><p>Singapore country view; PC-only games excluded</p></article></section><section class="brief-section executive-section">
+</section><div class="sea-non-tab-content"><section class="summary-card-grid"><article class="summary-card snapshot"><small>Current snapshot</small><h3>8 included launches</h3><p>0 high / 8 early</p></article><article class="summary-card opportunity"><small>Top opportunity</small><h3>hololive Dreams</h3><p>$180,003</p></article><article class="summary-card action"><small>Singapore ST Gross Revenue</small><h3>$238,535</h3><p>Singapore country view; PC-only games excluded</p></article></section><section class="brief-section executive-section">
   <div class="section-heading"><div><h2>Executive Summary</h2><p>Level 1 scan: what changed, why it matters, and where to focus.</p></div></div>
   <ul class="executive-bullets"><li>8 released-game record(s) are included in the current market brief.</li><li>0 title(s) are classified as High Revenue Signals and 8 are Early Revenue Signals.</li><li>hololive Dreams leads available SG ST Gross Revenue at $180,003.</li></ul>
 </section><section class="brief-section released-games-section">
@@ -796,8 +793,21 @@
 </article></div>
   <h3 class="signal-heading">Release Support <span>Release articles matched to games already selected by Sensor Tower or SteamDB.</span></h3>
   <div class="news-context-grid"><article class="empty-state polished-empty"><h3>No release-support news matched selected games</h3><p>Game Release radar items only appear here when they match a Sensor Tower or SteamDB selected game.</p></article></div>
-</section><details class="methodology"><summary>Methodology and data notes</summary><p>Discovery uses app IDs first observed in SG Games Top Grossing history. Release dates are evidence only and are not discovery gates. Revenue is shown as estimated gross revenue from Sensor Tower where available.</p></details></main>
+</section><details class="methodology"><summary>Methodology and data notes</summary><p>Discovery uses app IDs first observed in SG Games Top Grossing history. Release dates are evidence only and are not discovery gates. Revenue is shown as estimated gross revenue from Sensor Tower where available.</p></details></div></main>
     </div>
   </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const tabs = [...document.querySelectorAll('[data-sea-target]')];
+      const nonTabContent = document.querySelector('.sea-non-tab-content');
+      if (!tabs.length || !nonTabContent) return;
+      const syncNonTabContent = (target) => {
+        const hash = location.hash.replace('#', '');
+        nonTabContent.hidden = (target || hash) !== '' && (target || hash) !== 'sea6-summary' && (target || hash) !== 'sea6-summary-panel';
+      };
+      tabs.forEach((tab) => tab.addEventListener('click', () => syncNonTabContent(tab.dataset.seaTarget)));
+      syncNonTabContent();
+    });
+  </script>
 </body>
 </html>

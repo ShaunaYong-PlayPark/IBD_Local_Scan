@@ -725,6 +725,7 @@ def page_shell(title, active, body, rows, schedule, metadata):
         f'aria-current="{"page" if key == active else "false"}">{escape(label)}</a>'
         for href, label, desc, key in NAV_ITEMS
     )
+    sea_tabs = sea_country_tabs_nav() if active == "latest" else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -745,6 +746,7 @@ def page_shell(title, active, body, rows, schedule, metadata):
       <nav class="top-nav" aria-label="Primary navigation">{nav}</nav>
     </header>
     <div class="workspace">
+      <div class="fixed-secondary-row">
       <header class="topbar compact-topbar slim-context-bar" aria-label="Brief context">
         <div class="inline-context">
           <b>{escape(active_name)}</b>
@@ -752,14 +754,24 @@ def page_shell(title, active, body, rows, schedule, metadata):
           <span>Meeting: {escape(meeting or "N/A")}</span>
           <span>Data as of: {escape(data_as_of(metadata, rows))}</span>
         </div>
-        <div class="top-actions compact-actions">
-          <a class="btn ghost" href="historical-briefs.html">Previous Briefs</a>
-          <a class="btn primary" href="latest-brief.html">Latest Brief</a>
-        </div>
       </header>
+      {sea_tabs}</div>
       <main id="main-content">{body}</main>
     </div>
   </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {{
+      const tabs = [...document.querySelectorAll('[data-sea-target]')];
+      const nonTabContent = document.querySelector('.sea-non-tab-content');
+      if (!tabs.length || !nonTabContent) return;
+      const syncNonTabContent = (target) => {{
+        const hash = location.hash.replace('#', '');
+        nonTabContent.hidden = (target || hash) !== '' && (target || hash) !== 'sea6-summary' && (target || hash) !== 'sea6-summary-panel';
+      }};
+      tabs.forEach((tab) => tab.addEventListener('click', () => syncNonTabContent(tab.dataset.seaTarget)));
+      syncNonTabContent();
+    }});
+  </script>
 </body>
 </html>"""
 
@@ -871,6 +883,16 @@ def sea_country_card(row, country, report_rows):
 </article>'''
 
 
+def sea_country_tabs_nav():
+    country_names = {"SG": "Singapore", "MY": "Malaysia", "PH": "Philippines", "ID": "Indonesia", "TH": "Thailand", "VN": "Vietnam"}
+    tabs = ['<a class="sea-tab active" href="#sea6-summary" data-sea-target="sea6-summary-panel" aria-selected="true">SEA6 Summary</a>']
+    tabs.extend(
+        f'<a class="sea-tab" href="#sea-{country.lower()}" data-sea-target="sea-{country.lower()}" aria-selected="false">{name}</a>'
+        for country, name in country_names.items()
+    )
+    return f'<nav class="sea-country-tabs" aria-label="SEA6 country views">{"".join(tabs)}</nav>'
+
+
 def sea_regional_section(sea_games, report_rows):
     included = included_sea_games(sea_games)
     if not included:
@@ -884,10 +906,8 @@ def sea_regional_section(sea_games, report_rows):
             f'<tr><td><b>{escape(row.get("game_title") or original or "Untitled")}</b>{original_html}</td><td>{escape(row.get("countries_detected") or "N/A")}</td><td class="num">{escape(money(row.get("sea_st_gross_revenue")))}</td><td class="num">{escape(number(row.get("sea_st_downloads")))}</td><td>{escape(row.get("top_country_by_revenue") or "N/A")}</td><td><span class="metric-badge neutral">{escape(sea_signal_label(row, summary))}</span></td></tr>'
         )
     country_names = {"SG": "Singapore", "MY": "Malaysia", "PH": "Philippines", "ID": "Indonesia", "TH": "Thailand", "VN": "Vietnam"}
-    tabs = ['<a class="sea-tab active" href="#sea6-summary">SEA6 Summary</a>']
     panels = []
     for country, name in country_names.items():
-        tabs.append(f'<a class="sea-tab" href="#sea-{country.lower()}" data-sea-target="sea-{country.lower()}" aria-selected="false">{name}</a>')
         prefix = country.lower()
         country_rows = sorted(
             [row for row in included if safe_float(row.get(f"{prefix}_revenue_gross")) or safe_float(row.get(f"{prefix}_downloads"))],
@@ -902,7 +922,6 @@ def sea_regional_section(sea_games, report_rows):
         )
     ranking_as_of = display_date(summary["ranking_data_as_of"]) or "N/A"
     return f'''<section class="brief-section sea-regional-section">
-  <nav class="sea-country-tabs" aria-label="SEA6 country views"><a class="sea-tab active" href="#sea6-summary" data-sea-target="sea6-summary-panel" aria-selected="true">SEA6 Summary</a>{"".join(tabs[1:])}</nav>
   <div class="sea-view-panel sea-summary-panel active" id="sea6-summary-panel">
   <div class="section-heading"><div><h2 id="sea6-summary">SEA6 Summary</h2><p>Regional view of included new mobile games across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div><span class="sea-ranking-note">Ranking data as of <b>{escape(ranking_as_of)}</b></span></div>
   <div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(summary["sea_st_gross_revenue"]))}</b><em>Included new games only</em></span><span><small>SEA6 ST Downloads</small><b>{escape(number(summary["sea_st_downloads"]))}</b><em>Included new games only</em></span><span><small>Included new mobile games</small><b>{summary["game_count"]}</b></span><span><small>Games in 2+ countries</small><b>{summary["multi_country_game_count"]}</b></span><span><small>Top revenue country</small><b>{escape(summary["top_country_by_revenue"])}</b></span><span><small>Top download country</small><b>{escape(summary["top_country_by_downloads"])}</b></span></div>
@@ -1214,11 +1233,13 @@ def latest_page(rows, schedule, metadata, view="cards", news_context=None, sea_g
             "Regional view of the latest SEA6 market scan.",
         )
         + sea_regional_section(sea_games or [], rows)
+        + '<div class="sea-non-tab-content">'
         + summary_cards(rows)
         + executive_summary(rows)
         + released_games_section(strong, emerging, view)
         + news_context_section(news_context)
         + """<details class="methodology"><summary>Methodology and data notes</summary><p>Discovery uses app IDs first observed in SG Games Top Grossing history. Release dates are evidence only and are not discovery gates. Revenue is shown as estimated gross revenue from Sensor Tower where available.</p></details>"""
+        + '</div>'
     )
     return page_shell("Latest Brief", "latest", body, rows, schedule, metadata)
 
@@ -1605,21 +1626,26 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
   .view-toggle{display:grid!important;grid-template-columns:1fr 1fr!important;width:100%!important}
 }
 
-/* Fixed navigation stack: content is offset below the three viewport layers. */
-:root{--dashboard-header-height:56px;--dashboard-context-height:46px;--dashboard-tabs-height:66px;--dashboard-tabs-top:102px}
+/* Compact fixed navigation: header and secondary context/tabs share two rows. */
+:root{--dashboard-header-height:56px;--dashboard-secondary-height:68px}
 .site-header{position:fixed!important;top:0!important;left:0!important;right:0!important;width:100%!important;z-index:60!important}
-.slim-context-bar,.compact-topbar{position:fixed!important;top:var(--dashboard-header-height)!important;left:0!important;right:0!important;width:100%!important;z-index:50!important}
-.dashboard-page main#main-content{padding-top:calc(var(--dashboard-header-height) + var(--dashboard-context-height) + 16px)!important}
-.dashboard-page.page-latest main#main-content{padding-top:calc(var(--dashboard-header-height) + var(--dashboard-context-height) + var(--dashboard-tabs-height) + 16px)!important}
-.sea-country-tabs{position:fixed!important;top:var(--dashboard-tabs-top)!important;left:clamp(14px,2vw,28px)!important;right:clamp(14px,2vw,28px)!important;margin:0!important;z-index:40!important}
+.fixed-secondary-row{position:fixed!important;top:var(--dashboard-header-height)!important;left:0!important;right:0!important;width:100%!important;z-index:50!important;display:flex!important;align-items:center!important;gap:14px!important;min-height:var(--dashboard-secondary-height)!important;padding:8px clamp(14px,2vw,28px)!important;background:#FFFFFFF7!important;border-bottom:1px solid var(--line)!important;box-shadow:0 6px 16px rgba(9,30,66,.10)!important;backdrop-filter:blur(8px)!important}
+.slim-context-bar,.compact-topbar{position:static!important;flex:0 0 auto!important;min-height:0!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;backdrop-filter:none!important}
+.inline-context{flex-wrap:nowrap!important;white-space:nowrap!important}
+.sea-country-tabs{position:static!important;flex:1 1 auto!important;min-width:0!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;backdrop-filter:none!important;flex-wrap:nowrap!important;overflow-x:auto!important;white-space:nowrap!important}
+.dashboard-page main#main-content{padding-top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 16px)!important}
 @media(max-width:1180px){
-  :root{--dashboard-header-height:100px;--dashboard-context-height:64px;--dashboard-tabs-height:66px;--dashboard-tabs-top:164px}
+  :root{--dashboard-header-height:100px;--dashboard-secondary-height:82px}
+  .fixed-secondary-row{align-items:flex-start!important}
+  .inline-context{white-space:normal!important}
 }
 @media(max-width:768px){
-  :root{--dashboard-header-height:164px;--dashboard-context-height:120px;--dashboard-tabs-height:66px;--dashboard-tabs-top:284px}
+  :root{--dashboard-header-height:164px;--dashboard-secondary-height:122px}
+  .fixed-secondary-row{display:grid!important;grid-template-columns:1fr!important;gap:8px!important;align-content:center!important}
+  .sea-country-tabs{width:100%!important}
 }
 @media(max-width:430px){
-  :root{--dashboard-header-height:252px;--dashboard-context-height:170px;--dashboard-tabs-height:66px;--dashboard-tabs-top:422px}
+  :root{--dashboard-header-height:252px;--dashboard-secondary-height:150px}
 }
 """
     write_text(ASSETS / "static-dashboard.css", css)
