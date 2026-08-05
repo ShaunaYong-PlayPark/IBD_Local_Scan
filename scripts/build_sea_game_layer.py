@@ -30,6 +30,7 @@ for _country in SEA6_COUNTRIES:
     OUTPUT_FIELDS.extend(
         [
             f"{_prefix}_revenue_gross",
+            f"{_prefix}_revenue_prior_store",
             f"{_prefix}_downloads",
             f"{_prefix}_ios_rank",
             f"{_prefix}_android_rank",
@@ -123,9 +124,11 @@ def candidate_universe(unified_exports):
             datetime.now(timezone.utc).isoformat(),
         ):
             key = row["unified_id"]
-            current = candidates.get(key)
-            if current is None or parse_number(row["revenue_gross_estimate"]) > parse_number(current["candidate"]["revenue_gross_estimate"]):
-                candidates[key] = {"candidate": row, "candidate_country": country}
+            current = candidates.setdefault(key, {"candidate": row, "candidate_country": country, "by_country": {}})
+            current["by_country"][country] = row
+            if parse_number(row["revenue_gross_estimate"]) > parse_number(current["candidate"]["revenue_gross_estimate"]):
+                current["candidate"] = row
+                current["candidate_country"] = country
     return candidates
 
 
@@ -144,6 +147,7 @@ def build_rows(meeting_date, unified_exports, ranking_files):
     rows = []
     for unified_id, selected in candidates.items():
         candidate = selected["candidate"]
+        candidate_by_country = selected.get("by_country", {})
         title = candidate.get("unified_name", "")
         title_key = mobile.normalize_app_name(title)
         english_title, _translation_needed, _source = mobile.resolve_english_report_name(
@@ -168,6 +172,7 @@ def build_rows(meeting_date, unified_exports, ranking_files):
                 countries_detected.append(country)
             by_country[country] = {
                 "revenue": revenue,
+                "prior_store": parse_number(candidate_by_country.get(country, {}).get("revenue_prior_store")),
                 "downloads": downloads,
                 "ios_rank": platform_values.get("ios", {}).get("rank", ""),
                 "android_rank": platform_values.get("android", {}).get("rank", ""),
@@ -201,6 +206,7 @@ def build_rows(meeting_date, unified_exports, ranking_files):
         for country in SEA6_COUNTRIES:
             prefix = country.lower()
             output[f"{prefix}_revenue_gross"] = format_number(by_country[country]["revenue"])
+            output[f"{prefix}_revenue_prior_store"] = format_number(by_country[country]["prior_store"])
             output[f"{prefix}_downloads"] = format_number(by_country[country]["downloads"])
             output[f"{prefix}_ios_rank"] = by_country[country]["ios_rank"]
             output[f"{prefix}_android_rank"] = by_country[country]["android_rank"]

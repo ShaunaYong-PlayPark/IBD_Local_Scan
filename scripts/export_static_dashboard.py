@@ -575,38 +575,46 @@ def source_sea_game_layer(rows, schedule):
     return read_csv(sea_game_layer_path(meeting_date)) if meeting_date else []
 
 
-def sea_game_is_included(row):
-    revenue = safe_float(row.get("sea_st_gross_revenue"))
-    ranked = any(
-        row.get(f"{country}_{platform}_rank")
-        for country in ("sg", "my", "ph", "id", "th", "vn")
-        for platform in ("ios", "android")
-    )
-    return revenue >= 3000 or (ranked and revenue >= 1000)
+SEA6_COUNTRIES = ("SG", "MY", "PH", "ID", "TH", "VN")
+
+
+def country_game_is_included(row, country):
+    prefix = country.lower()
+    revenue = safe_float(row.get(f"{prefix}_revenue_gross"))
+    if revenue >= 3000:
+        return True
+    ranked = bool(row.get(f"{prefix}_ios_rank") or row.get(f"{prefix}_android_rank"))
+    prior_value = str(row.get(f"{prefix}_revenue_prior_store") or "").strip()
+    return ranked and prior_value != "" and safe_float(prior_value) == 0 and revenue >= 1000
+
+
+def included_country_games(sea_games, report_rows=None, country="SG"):
+    """Return only games that qualify from the selected country's evidence."""
+    return [row for row in sea_games if country_game_is_included(row, country)]
 
 
 def included_sea_games(sea_games, report_rows=None):
-    candidates = [row for row in sea_games if sea_game_is_included(row)]
-    if report_rows is None:
-        return candidates
-    final_mobile_keys = {
-        normalized_key(title_for(row))
-        for row in report_rows
-        if row.get("report_classification") != "pc_only"
-    }
-    return [
-        row for row in candidates
-        if normalized_key(row.get("game_title") or row.get("original_title")) in final_mobile_keys
-    ]
+    """Return the unique union of country-qualified game rows."""
+    included = []
+    seen = set()
+    for country in SEA6_COUNTRIES:
+        for row in included_country_games(sea_games, report_rows, country):
+            key = normalized_key(row.get("game_title") or row.get("original_title"))
+            if key in seen:
+                continue
+            seen.add(key)
+            included.append(row)
+    return included
 
 
-def sea_country_summary(sea_games):
+def sea_country_summary(sea_games, report_rows=None):
     output = {}
-    for country in ("sg", "my", "ph", "id", "th", "vn"):
-        revenue_field = f"{country}_revenue_gross"
-        downloads_field = f"{country}_downloads"
-        country_rows = [row for row in sea_games if safe_float(row.get(revenue_field)) or safe_float(row.get(downloads_field))]
-        output[country.upper()] = {
+    for country in SEA6_COUNTRIES:
+        prefix = country.lower()
+        revenue_field = f"{prefix}_revenue_gross"
+        downloads_field = f"{prefix}_downloads"
+        country_rows = included_country_games(sea_games, report_rows, country)
+        output[country] = {
             "sea_st_gross_revenue": sum(safe_float(row.get(revenue_field)) for row in country_rows),
             "sea_st_downloads": sum(safe_float(row.get(downloads_field)) for row in country_rows),
             "game_count": len(country_rows),
@@ -614,8 +622,8 @@ def sea_country_summary(sea_games):
     return output
 
 
-def sea_summary(sea_games):
-    included = included_sea_games(sea_games)
+def sea_summary(sea_games, report_rows=None):
+    included = included_sea_games(sea_games, report_rows)
     if not included:
         return {
             "sea_st_gross_revenue": 0,
@@ -624,14 +632,14 @@ def sea_summary(sea_games):
             "game_count": 0,
             "top_country_by_revenue": "",
             "top_country_by_downloads": "",
-            "country_summaries": sea_country_summary([]),
+            "country_summaries": sea_country_summary([], report_rows),
             "top_games": [],
         }
     ranked = sorted(
         included,
         key=lambda row: (-safe_float(row.get("sea_st_gross_revenue")), str(row.get("game_title") or "").lower()),
     )
-    country_summaries = sea_country_summary(included)
+    country_summaries = sea_country_summary(sea_games, report_rows)
     return {
         "sea_st_gross_revenue": sum(safe_float(row.get("sea_st_gross_revenue")) for row in included),
         "sea_st_downloads": sum(safe_float(row.get("sea_st_downloads")) for row in included),
@@ -966,7 +974,7 @@ def sea_regional_section(sea_games, report_rows, news_context=None):
     included = included_sea_games(sea_games, report_rows)
     if not included:
         return ""
-    summary = sea_summary(included)
+    summary = sea_summary(sea_games, report_rows)
     table_rows = []
     for row in summary["top_games"]:
         original = row.get("original_title") or ""
@@ -979,7 +987,7 @@ def sea_regional_section(sea_games, report_rows, news_context=None):
     for country, name in country_names.items():
         prefix = country.lower()
         country_rows = sorted(
-            [row for row in included if safe_float(row.get(f"{prefix}_revenue_gross")) or safe_float(row.get(f"{prefix}_downloads"))],
+            included_country_games(sea_games, report_rows, country),
             key=lambda row: (-safe_float(row.get(f"{prefix}_revenue_gross")), row.get("game_title", "").lower()),
         )
         country_summary = summary["country_summaries"][country]
@@ -1477,7 +1485,7 @@ def write_rows_csv(path, rows):
 def write_data(rows, metadata, schedule, weekly_summary=None, news_context=None, sea_games=None):
     DATA.mkdir(parents=True, exist_ok=True)
     metadata = normalized_metadata(metadata, rows)
-    sea_payload = sea_summary(included_sea_games(sea_games or [], rows))
+    sea_payload = sea_summary(sea_games or [], rows)
     write_text(
         DATA / "final-report.json",
         json.dumps(

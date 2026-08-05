@@ -374,6 +374,12 @@ def main():
                 assert_true(own_value in country_panel, f"{country_code} panel should show its own country metric")
                 if other_value != "$0":
                     assert_true(other_value not in country_panel, f"{country_code} panel should not leak SG metrics")
+            ph_start = latest_html.index('id="sea-ph"')
+            ph_end = latest_html.find('<section class="sea-view-panel', ph_start + 1)
+            ph_panel = latest_html[ph_start:ph_end if ph_end >= 0 else None]
+            assert_true("No included new games in Philippines" in ph_panel, "below-threshold PH rows should not be included")
+            assert_true(payload["sea_summary"]["country_summaries"]["PH"]["game_count"] == 0, "PH summary should count only PH-qualified games")
+            assert_true(payload["sea_summary"]["country_summaries"]["MY"]["game_count"] == 1, "MY summary should count its own qualifying game")
             assert_true('class="sea-non-tab-content"' in latest_html, "methodology content should remain outside country panels")
             assert_true("Future PC Game" not in latest_html, "PC-only releases outside the period should not render")
             assert_true("Old Revenue Game" not in latest_html, "old revenue-active game should not render in final report")
