@@ -27,6 +27,7 @@ MEETING_PACK_OUTPUT_ROOT = OUT / "meeting_pack"
 NEWS_CONTEXT_FILENAME = "news_context_review.csv"
 GAME_REPORT_FILENAME = "game_report_layer.csv"
 GAME_ENRICHED_FILENAME = "game_enriched_layer.csv"
+SEA_GAME_LAYER_FILENAME = "sea_game_layer.csv"
 PROOF_RUNS = DOCS / "proof-runs"
 
 
@@ -174,6 +175,10 @@ def game_report_path(meeting_date):
 
 def game_enriched_path(meeting_date):
     return meeting_pack_dir(meeting_date) / GAME_ENRICHED_FILENAME
+
+
+def sea_game_layer_path(meeting_date):
+    return meeting_pack_dir(meeting_date) / SEA_GAME_LAYER_FILENAME
 
 
 def parse_source_period(value):
@@ -557,6 +562,33 @@ def source_news_context(rows, schedule):
     return output
 
 
+def source_sea_game_layer(rows, schedule):
+    meeting_date = meeting_date_key(rows, schedule)
+    return read_csv(sea_game_layer_path(meeting_date)) if meeting_date else []
+
+
+def sea_summary(sea_games):
+    if not sea_games:
+        return {
+            "sea_st_gross_revenue": 0,
+            "sea_st_downloads": 0,
+            "ranking_data_as_of": "",
+            "game_count": 0,
+            "top_games": [],
+        }
+    ranked = sorted(
+        sea_games,
+        key=lambda row: (-safe_float(row.get("sea_st_gross_revenue")), str(row.get("game_title") or "").lower()),
+    )
+    return {
+        "sea_st_gross_revenue": sum(safe_float(row.get("sea_st_gross_revenue")) for row in sea_games),
+        "sea_st_downloads": sum(safe_float(row.get("sea_st_downloads")) for row in sea_games),
+        "ranking_data_as_of": ranked[0].get("ranking_data_as_of", ""),
+        "game_count": len(sea_games),
+        "top_games": ranked[:5],
+    }
+
+
 def in_progress_period(schedule):
     start = schedule.get("last_completed_meeting_date", "")
     meeting = parse_date(schedule.get("upcoming_meeting_date", ""))
@@ -728,6 +760,39 @@ def summary_cards(rows):
     ) + "</section>"
 
 
+def sea_regional_section(sea_games):
+    if not sea_games:
+        return ""
+    summary = sea_summary(sea_games)
+    top_games = summary["top_games"]
+    cards = []
+    for row in top_games:
+        country_chips = []
+        for country in ("SG", "MY", "PH", "ID", "TH", "VN"):
+            revenue = row.get(f"{country.lower()}_revenue_gross")
+            if safe_float(revenue) <= 0:
+                continue
+            country_chips.append(
+                f'<span class="sea-country-chip"><b>{country}</b><span>{escape(money(revenue))}</span></span>'
+            )
+        chips = "".join(country_chips) or '<span class="muted-value">No country revenue detail</span>'
+        cards.append(
+            f'''<article class="sea-game-card">
+  <div class="sea-game-card-heading"><h3>{escape(row.get("game_title") or row.get("original_title") or "Untitled")}</h3><span>{escape(row.get("top_country_by_revenue") or "N/A")} lead</span></div>
+  <p class="sea-game-meta">Countries: {escape(row.get("countries_detected") or "N/A")}</p>
+  <div class="sea-game-totals"><span><small>SEA ST Gross Revenue</small><b>{escape(money(row.get("sea_st_gross_revenue")))}</b></span><span><small>SEA ST Downloads</small><b>{escape(number(row.get("sea_st_downloads")))}</b></span></div>
+  <div class="sea-country-chip-row">{chips}</div>
+</article>'''
+        )
+    ranking_as_of = display_date(summary["ranking_data_as_of"]) or "N/A"
+    return f'''<section class="brief-section sea-regional-section">
+  <div class="section-heading"><div><h2>SEA6 Regional View</h2><p>Combined Sensor Tower view across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div><span class="sea-ranking-note">Ranking data as of <b>{escape(ranking_as_of)}</b></span></div>
+  <div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(summary["sea_st_gross_revenue"]))}</b></span><span><small>SEA6 ST Downloads</small><b>{escape(number(summary["sea_st_downloads"]))}</b></span><span><small>Combined games</small><b>{summary["game_count"]}</b></span></div>
+  <h3 class="signal-heading">Top 5 SEA Games <span>Ranked by combined SEA ST Gross Revenue.</span></h3>
+  <div class="sea-game-grid">{"".join(cards)}</div>
+</section>'''
+
+
 def executive_summary(rows):
     if not rows:
         bullets = [
@@ -816,7 +881,7 @@ def signal_card(row, group):
   <div class="card-block card-evidence">
     <h4>Key Details</h4>
     <p>{escape(details)}</p>
-    {continuity_html}
+{continuity_html}
   </div>
 </article>"""
 
@@ -1018,7 +1083,7 @@ def news_context_section(news_context):
 </section>"""
 
 
-def latest_page(rows, schedule, metadata, view="cards", news_context=None):
+def latest_page(rows, schedule, metadata, view="cards", news_context=None, sea_games=None):
     news_context = news_context or []
     strong = sort_rows([r for r in rows if signal_group(r) == "strong"])
     emerging = sort_rows([r for r in rows if signal_group(r) != "strong"])
@@ -1029,6 +1094,7 @@ def latest_page(rows, schedule, metadata, view="cards", news_context=None):
             "Executive view of the latest Singapore market scan.",
         )
         + summary_cards(rows)
+        + sea_regional_section(sea_games or [])
         + executive_summary(rows)
         + released_games_section(strong, emerging, view)
         + news_context_section(news_context)
@@ -1176,13 +1242,14 @@ def write_rows_csv(path, rows):
         writer.writerows(rows)
 
 
-def write_data(rows, metadata, schedule, weekly_summary=None, news_context=None):
+def write_data(rows, metadata, schedule, weekly_summary=None, news_context=None, sea_games=None):
     DATA.mkdir(parents=True, exist_ok=True)
     metadata = normalized_metadata(metadata, rows)
+    sea_payload = sea_summary(sea_games or [])
     write_text(
         DATA / "final-report.json",
         json.dumps(
-            {"rows": rows, "metadata": metadata, "schedule": schedule, "staging": weekly_summary or {}, "news_context": news_context or []},
+            {"rows": rows, "metadata": metadata, "schedule": schedule, "staging": weekly_summary or {}, "news_context": news_context or [], "sea_summary": sea_payload, "sea_games": sea_payload["top_games"]},
             ensure_ascii=False,
             indent=2,
         ),
@@ -1209,6 +1276,24 @@ def write_assets():
 .news-context-card h3{margin:0;color:var(--blue-900);font-size:19px;line-height:1.2;overflow-wrap:anywhere}
 .news-context-card p{margin:0;color:var(--ink-2);line-height:1.45}
 .news-context-card a{font-weight:900;color:var(--blue-600)}
+.sea-regional-section{border-top:4px solid #16806A}
+.sea-ranking-note{color:var(--muted);font-size:13px;white-space:nowrap}
+.sea-summary-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:4px 0 18px}
+.sea-summary-strip>span{border:1px solid #CFE8E1;background:#F3FBF8;border-radius:12px;padding:12px}
+.sea-summary-strip small,.sea-game-totals small{display:block;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:900}
+.sea-summary-strip b{display:block;color:#126B59;font-size:21px;margin-top:4px}
+.sea-game-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
+.sea-game-card{border:1px solid #D7E8E2;background:#FBFEFD;border-radius:14px;padding:14px;display:grid;gap:10px}
+.sea-game-card-heading{display:flex;justify-content:space-between;align-items:start;gap:10px}
+.sea-game-card-heading h3{margin:0;color:var(--blue-900);font-size:18px;line-height:1.2;overflow-wrap:anywhere}
+.sea-game-card-heading>span{color:#126B59;font-size:11px;font-weight:900;white-space:nowrap}
+.sea-game-meta{margin:0;color:var(--muted);font-size:13px;line-height:1.4}
+.sea-game-totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.sea-game-totals>span{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px}
+.sea-game-totals b{display:block;color:var(--blue-900);font-size:17px;margin-top:3px}
+.sea-country-chip-row{display:flex;flex-wrap:wrap;gap:6px}
+.sea-country-chip{display:inline-flex;gap:5px;align-items:center;border:1px solid #D7E8E2;background:#fff;border-radius:999px;padding:5px 8px;font-size:11px}
+.sea-country-chip b{color:#126B59}.sea-country-chip span{color:var(--ink-2)}
 .tracker-filters label{display:grid;gap:6px;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
 .tracker-filters input,.tracker-filters select{min-width:min(320px,100%)}
 .original-title{font-size:12px;font-style:italic;color:#7B8794}
@@ -1359,7 +1444,7 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
   .section-heading .view-toggle{margin-top:12px!important}
   .signal-heading{display:block!important}
   .signal-heading span{text-align:left!important;display:block!important;margin-top:4px!important}
-  .market-chip-row,.summary-card-grid{grid-template-columns:1fr!important}
+  .market-chip-row,.summary-card-grid,.sea-summary-strip{grid-template-columns:1fr!important}
   .archive-card.reading-card{grid-template-columns:1fr!important}
   .data-table{margin-left:0!important;margin-right:0!important}
   .archive-toolbar .btn,.archive-toolbar input{width:100%!important}
@@ -1395,10 +1480,11 @@ def main(argv=None):
         schedule["upcoming_meeting_date"] = args.meeting_date
     rows = source_report_rows(metadata, schedule)
     news_context = source_news_context(rows, schedule)
+    sea_games = source_sea_game_layer(rows, schedule)
     DOCS.mkdir(parents=True, exist_ok=True)
     write_assets()
-    write_data(rows, metadata, schedule, weekly_summary, news_context)
-    latest_cards = latest_page(rows, schedule, metadata, "cards", news_context)
+    write_data(rows, metadata, schedule, weekly_summary, news_context, sea_games)
+    latest_cards = latest_page(rows, schedule, metadata, "cards", news_context, sea_games)
     write_text(DOCS / "index.html", latest_cards)
     write_text(DOCS / "latest-brief.html", latest_cards)
     write_text(DOCS / "historical-briefs.html", historical_page(rows, schedule, metadata, weekly_summary))

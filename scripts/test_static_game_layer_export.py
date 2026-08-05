@@ -64,6 +64,18 @@ NEWS_FIELDS = [
     "editor_note",
 ]
 
+SEA_FIELDS = [
+    "game_title", "original_title", "publisher", "developer", "genre", "platforms",
+    "sea_st_gross_revenue", "sea_st_downloads", "countries_detected", "top_country_by_revenue",
+    "sg_revenue_gross", "sg_downloads", "sg_ios_rank", "sg_android_rank",
+    "my_revenue_gross", "my_downloads", "my_ios_rank", "my_android_rank",
+    "ph_revenue_gross", "ph_downloads", "ph_ios_rank", "ph_android_rank",
+    "id_revenue_gross", "id_downloads", "id_ios_rank", "id_android_rank",
+    "th_revenue_gross", "th_downloads", "th_ios_rank", "th_android_rank",
+    "vn_revenue_gross", "vn_downloads", "vn_ios_rank", "vn_android_rank",
+    "report_start_date", "report_end_date", "ranking_data_as_of", "meeting_date", "source_files",
+]
+
 
 def write_csv(path, rows, fields):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -272,6 +284,28 @@ def main():
                 ],
                 NEWS_FIELDS,
             )
+            write_csv(
+                meeting_dir / "sea_game_layer.csv",
+                [
+                    {
+                        "game_title": "SEA Shared RPG",
+                        "original_title": "SEA Shared RPG",
+                        "publisher": "SEA Publisher",
+                        "genre": "Games",
+                        "platforms": "iOS, Android",
+                        "sea_st_gross_revenue": "25000",
+                        "sea_st_downloads": "12000",
+                        "countries_detected": "SG, MY, PH",
+                        "top_country_by_revenue": "MY",
+                        "sg_revenue_gross": "5000",
+                        "my_revenue_gross": "18000",
+                        "ph_revenue_gross": "2000",
+                        "ranking_data_as_of": "2026-08-03",
+                        "meeting_date": "2026-08-04",
+                    }
+                ],
+                SEA_FIELDS,
+            )
             exporter.METADATA.parent.mkdir(parents=True, exist_ok=True)
             exporter.METADATA.write_text(
                 json.dumps(
@@ -297,6 +331,10 @@ def main():
             exported_rows = list(csv.DictReader((docs / "data" / "final_sg_market_scan_current_workflow.csv").open(encoding="utf-8-sig")))
 
             assert_true("Meeting: 04 Aug 2026" in latest_html, "meeting date should come from game layer")
+            assert_true("SEA6 Regional View" in latest_html, "SEA6 regional view should render")
+            assert_true("03 Aug 2026" in latest_html, "SEA ranking data-as-of date should render")
+            assert_true("SEA Shared RPG" in latest_html, "SEA top game should render")
+            assert_true("SG" in latest_html and "MY" in latest_html, "SEA country revenue chips should render")
             assert_true("Hololive Dreams" in latest_html, "game layer mobile row should render")
             assert_true("Pass the Fear" in latest_html, "game layer PC row should render")
             assert_true("Future PC Game" not in latest_html, "PC-only releases outside the period should not render")
@@ -349,6 +387,8 @@ def main():
                 assert_true(pc_row["SG App Store Ranks"] == "", "PC-only rows should not export app store ranks")
             assert_true(len(payload["rows"]) == 3, "final JSON should use qualifying game layer rows")
             assert_true(len(payload["news_context"]) == 1, "final JSON should use reviewed news rows")
+            assert_true(payload["sea_summary"]["ranking_data_as_of"] == "2026-08-03", "SEA summary ranking date should be exported")
+            assert_true(payload["sea_games"][0]["game_title"] == "SEA Shared RPG", "SEA games should be exported")
             assert_true(len(exported_rows) == 3, "final CSV export should match qualifying game layer rows")
     finally:
         exporter.DOCS = originals["docs"]
