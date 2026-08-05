@@ -115,6 +115,14 @@ def display_date(value):
     return parsed.strftime("%d %b %Y") if parsed else ""
 
 
+def compact_date(value, include_year=False):
+    formatted = display_date(value)
+    if include_year:
+        return formatted
+    parts = formatted.rsplit(" ", 1)
+    return parts[0] if len(parts) == 2 and parts[1].isdigit() else formatted
+
+
 def money(value):
     try:
         number = float(str(value or "0").replace(",", "").replace("$", ""))
@@ -726,6 +734,11 @@ def page_shell(title, active, body, rows, schedule, metadata):
         for href, label, desc, key in NAV_ITEMS
     )
     sea_tabs = sea_country_tabs_nav() if active == "latest" else ""
+    compact_start = compact_date(start)
+    compact_end = compact_date(end, include_year=True)
+    compact_meeting = compact_date(meeting)
+    compact_data_as_of = compact_date(data_as_of(metadata, rows))
+    full_context = f"{active_name} | Period: {display_date(start)} to {display_date(end)} | Meeting: {display_date(meeting)} | Data as of: {display_date(data_as_of(metadata, rows))}"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -749,10 +762,10 @@ def page_shell(title, active, body, rows, schedule, metadata):
       <div class="fixed-secondary-row">
       <header class="topbar compact-topbar slim-context-bar" aria-label="Brief context">
         <div class="inline-context">
-          <b>{escape(active_name)}</b>
-          <span>Period: {escape(start or "N/A")} to {escape(end or "N/A")}</span>
-          <span>Meeting: {escape(meeting or "N/A")}</span>
-          <span>Data as of: {escape(data_as_of(metadata, rows))}</span>
+          <b title="{escape(full_context)}">{escape(active_name)}</b>
+          <span title="Period: {escape(display_date(start))} to {escape(display_date(end))}">{escape(compact_start or "N/A")}-{escape(compact_end or "N/A")}</span>
+          <span title="Meeting: {escape(display_date(meeting))}">Meeting {escape(compact_meeting or "N/A")}</span>
+          <span title="Data as of: {escape(display_date(data_as_of(metadata, rows)))}">Data {escape(compact_data_as_of or "N/A")}</span>
         </div>
       </header>
       {sea_tabs}</div>
@@ -1629,23 +1642,26 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 /* Compact fixed navigation: header and secondary context/tabs share two rows. */
 :root{--dashboard-header-height:56px;--dashboard-secondary-height:68px}
 .site-header{position:fixed!important;top:0!important;left:0!important;right:0!important;width:100%!important;z-index:60!important}
-.fixed-secondary-row{position:fixed!important;top:var(--dashboard-header-height)!important;left:0!important;right:0!important;width:100%!important;z-index:50!important;display:flex!important;align-items:center!important;gap:14px!important;min-height:var(--dashboard-secondary-height)!important;padding:8px clamp(14px,2vw,28px)!important;background:#FFFFFFF7!important;border-bottom:1px solid var(--line)!important;box-shadow:0 6px 16px rgba(9,30,66,.10)!important;backdrop-filter:blur(8px)!important}
+.fixed-secondary-row{position:fixed!important;top:var(--dashboard-header-height)!important;left:0!important;right:0!important;width:100%!important;z-index:50!important;display:flex!important;align-items:center!important;gap:12px!important;min-height:var(--dashboard-secondary-height)!important;padding:7px clamp(14px,2vw,28px)!important;background:#FFFFFFF7!important;border-bottom:1px solid var(--line)!important;box-shadow:0 6px 16px rgba(9,30,66,.10)!important;backdrop-filter:blur(8px)!important}
 .slim-context-bar,.compact-topbar{position:static!important;flex:0 0 auto!important;min-height:0!important;padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important;backdrop-filter:none!important}
-.inline-context{flex-wrap:nowrap!important;white-space:nowrap!important}
-.sea-country-tabs{position:static!important;flex:1 1 auto!important;min-width:0!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;backdrop-filter:none!important;flex-wrap:nowrap!important;overflow-x:auto!important;white-space:nowrap!important}
+.inline-context{flex-wrap:nowrap!important;white-space:nowrap!important;font-size:12px!important;line-height:1.2!important;gap:6px!important}
+.inline-context b{font-size:12px!important}
+.inline-context span{white-space:nowrap!important}
+.sea-country-tabs{position:static!important;display:flex!important;flex:1 1 auto!important;min-width:0!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;backdrop-filter:none!important;flex-wrap:wrap!important;overflow:visible!important;white-space:normal!important;gap:5px!important;align-items:center!important}
+.sea-tab{padding:6px 9px!important;min-height:30px!important;font-size:12px!important;line-height:1!important;white-space:nowrap!important}
 .dashboard-page main#main-content{padding-top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 16px)!important}
 @media(max-width:1180px){
-  :root{--dashboard-header-height:100px;--dashboard-secondary-height:82px}
+  :root{--dashboard-header-height:100px;--dashboard-secondary-height:92px}
   .fixed-secondary-row{align-items:flex-start!important}
   .inline-context{white-space:normal!important}
 }
 @media(max-width:768px){
-  :root{--dashboard-header-height:164px;--dashboard-secondary-height:122px}
+  :root{--dashboard-header-height:164px;--dashboard-secondary-height:128px}
   .fixed-secondary-row{display:grid!important;grid-template-columns:1fr!important;gap:8px!important;align-content:center!important}
   .sea-country-tabs{width:100%!important}
 }
 @media(max-width:430px){
-  :root{--dashboard-header-height:252px;--dashboard-secondary-height:150px}
+  :root{--dashboard-header-height:252px;--dashboard-secondary-height:156px}
 }
 """
     write_text(ASSETS / "static-dashboard.css", css)
