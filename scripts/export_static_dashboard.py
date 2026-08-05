@@ -922,25 +922,59 @@ def sea_game_detail(row, report_rows):
     return publisher, developer, genre, platforms, summary
 
 
+def matching_report_row(row, report_rows):
+    key = normalized_key(row.get("game_title") or row.get("original_title"))
+    return next((item for item in report_rows if normalized_key(title_for(item)) == key), {})
+
+
+def steam_context_html(report_row, label="PC equivalent / Steam context"):
+    if not report_row or report_row.get("report_classification") != "mobile_led_cross_platform":
+        return ""
+    release = report_row.get("Release Date") or "N/A"
+    peak = report_row.get("steamdb_peak") or "N/A"
+    reviews = report_row.get("steamdb_reviews") or "N/A"
+    url = str(report_row.get("steam_url") or "").strip()
+    url_html = f'<a href="{escape(url)}" rel="noopener" target="_blank">Steam URL</a>' if url else "Steam URL N/A"
+    return f'<div class="steam-context"><b>{escape(label)}</b><span>Release {escape(display_date(release) or release)}</span><span>Peak {escape(number(peak))}</span><span>Reviews {escape(number(reviews))}</span><span>{url_html}</span></div>'
+
+
+def regional_pc_signals(report_rows):
+    rows = [row for row in report_rows if row.get("report_classification") == "pc_only"]
+    if not rows:
+        return ""
+    cards = []
+    for row in rows:
+        title = title_for(row)
+        url = str(row.get("steam_url") or "").strip()
+        url_html = f'<a href="{escape(url)}" rel="noopener" target="_blank">Steam URL</a>' if url else "Steam URL N/A"
+        cards.append(
+            f'<article class="regional-pc-card"><div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">Regional PC signal</span></div><div class="meta-chip-row"><span class="metric-badge neutral">Release {escape(display_date(row.get("Release Date")) or row.get("Release Date") or "N/A")}</span><span class="metric-badge neutral">Steam peak {escape(number(row.get("steamdb_peak")))}</span><span class="metric-badge neutral">Reviews {escape(number(row.get("steamdb_reviews")))}</span></div><p class="sea-game-summary">{escape(row.get("Inclusion Reason") or row.get("Key Details") or "Included by the SteamDB PC signal rule.")}</p><p class="sea-company-meta">{url_html}</p></article>'
+        )
+    return f'<section class="regional-pc-signals"><h3 class="signal-heading">Regional PC Signals <span>SteamDB is regional evidence, not country-specific performance.</span></h3><div class="sea-country-grid">{"".join(cards)}</div></section>'
+
+
 def sea_country_card(row, country, report_rows):
     prefix = country.lower()
     publisher, developer, genre, platforms, summary = sea_game_detail(row, report_rows)
+    report_row = matching_report_row(row, report_rows)
     original = row.get("original_title") or ""
     title = row.get("game_title") or original or "Untitled"
     original_html = f'<p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
     developer_html = f'<span class="sea-company-meta"><b>Developer</b> {escape(developer)}</span>' if developer else ""
     note = sea_country_note(row, country)
+    classification_label = "Mobile + PC" if report_row.get("report_classification") == "mobile_led_cross_platform" else "Mobile game"
     rank_html = "".join(
         f'<span class="metric-badge neutral">{label} #{escape(str(row.get(field) or "N/A"))}</span>'
         for label, field in (("iOS", f"{prefix}_ios_rank"), ("Android", f"{prefix}_android_rank"))
     )
     return f'''<article class="sea-country-card">
-  <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(platforms)}</span></div>
+  <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(classification_label)}</span><span class="metric-badge neutral">{escape(platforms)}</span></div>
 {original_html}
   <p class="sea-company-meta"><b>Publisher</b> {escape(publisher)} {developer_html}</p>
   <p class="sea-game-summary">{escape(summary)}</p>
   <div class="sea-country-stats"><span><small>ST Gross Revenue</small><b>{escape(money(row.get(f"{prefix}_revenue_gross")))}</b></span><span><small>ST Downloads</small><b>{escape(number(row.get(f"{prefix}_downloads")))}</b></span></div>
   <div class="meta-chip-row">{rank_html}</div>
+{steam_context_html(report_row)}
 {f'<p class="sea-country-note">{escape(note)}</p>' if note else ''}
 </article>'''
 
@@ -991,7 +1025,8 @@ def regional_news_rows(news_context):
 
 def sea_regional_section(sea_games, report_rows, news_context=None):
     included = included_sea_games(sea_games, report_rows)
-    if not included:
+    pc_signals = regional_pc_signals(report_rows)
+    if not included and not pc_signals:
         return ""
     summary = sea_summary(sea_games, report_rows)
     table_rows = []
@@ -1018,7 +1053,7 @@ def sea_regional_section(sea_games, report_rows, news_context=None):
             heading=f"{name} Game News Context",
         ) if news_context else ""
         panels.append(
-            f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden><div class="section-heading"><div><h2>{name}</h2><p>Country view using {name} Sensor Tower evidence only.</p></div></div><h3 class="country-section-label">Country Snapshot</h3><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><h3 class="country-section-label">Released Games</h3><div class="sea-country-grid">{cards}</div>{country_news}</section>'
+            f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden><div class="section-heading"><div><h2>{name}</h2><p>Country view using {name} Sensor Tower evidence only.</p></div></div><h3 class="country-section-label">Country Snapshot</h3><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><h3 class="country-section-label">Included Mobile Games</h3><div class="sea-country-grid">{cards}</div>{pc_signals}{country_news}</section>'
         )
     ranking_as_of = display_date(summary["ranking_data_as_of"]) or "N/A"
     regional_news = news_context_section(regional_news_rows(news_context or []), heading="SEA6 Game News Context", regional=True) if news_context else ""
@@ -1028,6 +1063,7 @@ def sea_regional_section(sea_games, report_rows, news_context=None):
   <div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(summary["sea_st_gross_revenue"]))}</b><em>Included new games only</em></span><span><small>SEA6 ST Downloads</small><b>{escape(number(summary["sea_st_downloads"]))}</b><em>Included new games only</em></span><span><small>Included new mobile games</small><b>{summary["game_count"]}</b></span><span><small>Top revenue country</small><b>{escape(summary["top_country_by_revenue"])}</b></span><span><small>Top download country</small><b>{escape(summary["top_country_by_downloads"])}</b></span></div>
   <h3 class="signal-heading">Top Regional Games <span>One row per game, ranked by combined SEA6 ST Gross Revenue.</span></h3>
   <div class="data-table sea-regional-table"><table><thead><tr><th>English title</th><th>Countries appeared in</th><th>SEA6 ST Gross Revenue</th><th>SEA6 ST Downloads</th><th>Top revenue country</th><th>Signal label</th></tr></thead><tbody>{"".join(table_rows)}</tbody></table></div>
+  {pc_signals}
   {regional_news}
   </div>
   {"".join(panels)}
@@ -1557,6 +1593,9 @@ def write_assets():
 .sea-country-card-heading{display:flex;justify-content:space-between;align-items:start;gap:10px}
 .sea-country-card-heading h3{margin:0;color:var(--blue-900);font-size:18px;line-height:1.2;overflow-wrap:anywhere}
 .sea-country-card .original-title{margin:0}
+.regional-pc-card{border:1px solid var(--line);border-left:4px solid var(--blue-500);border-radius:14px;background:#F7FAFF;padding:15px;display:grid;gap:10px}
+.steam-context{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--ink-700);font-size:12px}
+.steam-context b{color:var(--blue-900)}
 .sea-company-meta{color:#40566F;font-size:13px;line-height:1.4}
 .sea-company-meta b{color:#73869B;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-right:4px}
 .sea-game-summary{margin:0;color:var(--ink-2);font-size:13px;line-height:1.45}

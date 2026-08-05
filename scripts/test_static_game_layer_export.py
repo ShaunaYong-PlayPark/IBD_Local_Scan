@@ -1,5 +1,6 @@
 import csv
 import json
+import re
 
 import export_static_dashboard as exporter
 from test_temp_utils import repo_temp_dir
@@ -450,8 +451,17 @@ def main():
             star_payload = next(row for row in payload["rows"] if row["Game Title"] == "Star Sailors")
             assert_true("prior revenue was $0" in star_payload["Inclusion Reason"], "commercial-signal inclusion reason should stay in data")
             assert_true("prior revenue was $0" not in star_payload["Key Details"], "key details should describe the game, not inclusion logic")
-            assert_true("Released Games" in latest_html, "country release sections should render")
+            assert_true("Included Mobile Games" in latest_html, "country mobile sections should render")
             assert_true("Country Snapshot" in latest_html, "country snapshot sections should render")
+            assert_true(latest_html.count("Regional PC Signals") >= 7, "regional PC signals should appear in SEA6 and every country panel")
+            assert_true("Pass the Fear" in latest_html and "Regional PC signal" in latest_html, "PC-only games should render as regional PC signals")
+            pc_cards = re.findall(r'<article class="regional-pc-card">(.*?)</article>', latest_html, flags=re.S)
+            assert_true(pc_cards and all("ST Gross Revenue" not in card and "ST Downloads" not in card and "iOS #" not in card and "Android #" not in card for card in pc_cards), "PC signal cards must not show mobile metrics")
+            steam_context = exporter.steam_context_html(
+                {"report_classification": "mobile_led_cross_platform", "Release Date": "2026-07-23", "steamdb_peak": "16791", "steamdb_reviews": "1000", "steam_url": "https://example.com/steam"}
+            )
+            assert_true("PC equivalent / Steam context" in steam_context, "mobile+PC games should show Steam context")
+            assert_true("Peak 16,791" in steam_context and "Reviews 1,000" in steam_context, "mobile+PC Steam stats should render")
             assert_true("Malaysia Game News Context" in latest_html, "country news sections should render")
             assert_true("Reviewed announcement note." in latest_html, "reviewed news note should render")
             assert_true("Out-of-period announcement" not in latest_html, "out-of-period news should not render")

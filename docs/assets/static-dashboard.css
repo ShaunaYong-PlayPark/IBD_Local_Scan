@@ -246,6 +246,9 @@ button:disabled,.btn[disabled],button[aria-disabled="true"]{opacity:.55;cursor:n
 .sea-country-card-heading{display:flex;justify-content:space-between;align-items:start;gap:10px}
 .sea-country-card-heading h3{margin:0;color:var(--blue-900);font-size:18px;line-height:1.2;overflow-wrap:anywhere}
 .sea-country-card .original-title{margin:0}
+.regional-pc-card{border:1px solid var(--line);border-left:4px solid var(--blue-500);border-radius:14px;background:#F7FAFF;padding:15px;display:grid;gap:10px}
+.steam-context{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--ink-700);font-size:12px}
+.steam-context b{color:var(--blue-900)}
 .sea-company-meta{color:#40566F;font-size:13px;line-height:1.4}
 .sea-company-meta b{color:#73869B;font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-right:4px}
 .sea-game-summary{margin:0;color:var(--ink-2);font-size:13px;line-height:1.45}
