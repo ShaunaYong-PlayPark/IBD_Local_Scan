@@ -968,7 +968,7 @@ def sea_country_card(row, country, report_rows):
         for label, field in (("iOS", f"{prefix}_ios_rank"), ("Android", f"{prefix}_android_rank"))
     )
     return f'''<article class="sea-country-card">
-  <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(classification_label)}</span><span class="metric-badge neutral">{escape(platforms)}</span></div>
+  <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(classification_label)}</span></div>
 {original_html}
   <p class="sea-company-meta"><b>Publisher</b> {escape(publisher)} {developer_html}</p>
   <p class="sea-game-summary">{escape(summary)}</p>

@@ -452,6 +452,7 @@ def main():
             assert_true("prior revenue was $0" in star_payload["Inclusion Reason"], "commercial-signal inclusion reason should stay in data")
             assert_true("prior revenue was $0" not in star_payload["Key Details"], "key details should describe the game, not inclusion logic")
             assert_true("Included Mobile Games" in latest_html, "country mobile sections should render")
+            assert_true("Mobile game</span><span class=\"metric-badge neutral\">iOS, Android" not in latest_html, "mobile-only cards should not duplicate platform pills")
             assert_true("Country Snapshot" in latest_html, "country snapshot sections should render")
             assert_true(latest_html.count("Regional PC Signals") >= 7, "regional PC signals should appear in SEA6 and every country panel")
             assert_true("Pass the Fear" in latest_html and "Regional PC signal" in latest_html, "PC-only games should render as regional PC signals")
