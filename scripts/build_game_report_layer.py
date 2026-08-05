@@ -433,10 +433,7 @@ def chart_mobile_rows(meeting_date, mobile_fields, mobile_rows, pc_rows):
             if values.get("app_id"):
                 app_ids.append(values["app_id"])
         gross = revenue / 0.7 if revenue else 0.0
-        if gross < 3000 and not any(
-            "grossing" in key_name and numeric(value) > 0 and numeric(value) <= 200
-            for key_name, value in ranks.items()
-        ):
+        if gross <= 3000:
             continue
         row = {field: "" for field in mobile_fields}
         row.update({
@@ -449,7 +446,7 @@ def chart_mobile_rows(meeting_date, mobile_fields, mobile_rows, pc_rows):
             "translation_needed": "false",
             "main_report_mobile_candidate": "true",
             "appendix_mobile_candidate": "false",
-            "main_report_reason": "chart_matched_and_sg_gross_above_1000",
+            "main_report_reason": "sg_gross_above_3000",
             "unified_id": ";".join(app_ids),
             "unified_publisher_name": bucket["publisher"],
             "sg_downloads": str(round(downloads, 2)),

@@ -800,10 +800,8 @@ def main_report_classification(row):
         return "false", "true", "appendix_old_unmatched_release"
     if zero_download_unmatched:
         return "false", "true", "appendix_zero_download_unmatched"
-    if sg_gross >= 3000:
+    if sg_gross > 3000:
         return "true", "false", "sg_gross_above_3000"
-    if matched and sg_gross >= 1000:
-        return "true", "false", "chart_matched_and_sg_gross_above_1000"
     return "false", "true", "appendix_below_main_threshold"
 
 

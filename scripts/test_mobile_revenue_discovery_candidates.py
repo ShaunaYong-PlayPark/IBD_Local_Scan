@@ -606,7 +606,7 @@ def test_meeting_pack_builds_from_meeting_date_folder():
                         **{
                             "Unified Name": "Report Game",
                             "Unified ID": "uid-report",
-                            "Revenue (Absolute)": "$700",
+                            "Revenue (Absolute)": "$2101",
                             "Downloads (Absolute)": "70",
                         }
                     ),
@@ -631,17 +631,17 @@ def test_meeting_pack_builds_from_meeting_date_folder():
             write_unified_export(
                 folder,
                 "MY",
-                [row(**{"Unified Name": "Report Game", "Unified ID": "uid-report", "Revenue (Absolute)": "$1400", "Downloads (Absolute)": "140"})],
+                [row(**{"Unified Name": "Report Game", "Unified ID": "uid-report", "Revenue (Absolute)": "$2800", "Downloads (Absolute)": "140"})],
             )
             write_unified_export(
                 folder,
                 "ID",
-                [row(**{"Unified Name": "Report Game", "Unified ID": "uid-report", "Revenue (Absolute)": "$1200", "Downloads (Absolute)": "120"})],
+                [row(**{"Unified Name": "Report Game", "Unified ID": "uid-report", "Revenue (Absolute)": "$2600", "Downloads (Absolute)": "120"})],
             )
             write_unified_export(
                 folder,
                 "TH",
-                [row(**{"Unified Name": "Report Game", "Unified ID": "uid-report", "Revenue (Absolute)": "$1000", "Downloads (Absolute)": "100"})],
+                [row(**{"Unified Name": "Report Game", "Unified ID": "uid-report", "Revenue (Absolute)": "$2400", "Downloads (Absolute)": "100"})],
             )
             write_unified_export(
                 folder,
@@ -680,8 +680,8 @@ def test_meeting_pack_builds_from_meeting_date_folder():
             assert_true(appendix_path.exists(), "appendix output exists")
             assert_true(override_created, "title override file created")
             assert_equal(len(rows), 1, "SG report-facing extraction")
-            assert_equal(len(main_rows), 1, "chart matched report game qualifies for main")
-            assert_equal(len(appendix), 0, "chart matched report game not in appendix")
+            assert_equal(len(main_rows), 1, "above-threshold report game qualifies for main")
+            assert_equal(len(appendix), 0, "above-threshold report game not in appendix")
             assert_equal(translation_rows, [], "no translation rows for English title")
             assert_equal(fallback_overrides, [], "no fallback overrides for English title")
             assert_equal(resolution_sources["uid-report"], "mostly_english", "English title source")
@@ -878,7 +878,7 @@ def test_translation_needed_count_decreases_after_lookup():
 def test_main_report_rule_sg_gross_above_3000():
     result = discovery.main_report_classification(
         {
-            "sg_revenue_gross": "3000",
+            "sg_revenue_gross": "3001",
             "sg_downloads": "1",
             "chart_rank_match_status": "unmatched",
             "sg_release_date_reference": "2026/07/20",
@@ -887,7 +887,7 @@ def test_main_report_rule_sg_gross_above_3000():
     assert_equal(result, ("true", "false", "sg_gross_above_3000"), "SG gross threshold main")
 
 
-def test_main_report_rule_chart_matched_and_sg_gross_above_1000():
+def test_main_report_rule_chart_matched_below_3000_stays_appendix():
     result = discovery.main_report_classification(
         {
             "sg_revenue_gross": "1000",
@@ -898,8 +898,8 @@ def test_main_report_rule_chart_matched_and_sg_gross_above_1000():
     )
     assert_equal(
         result,
-        ("true", "false", "chart_matched_and_sg_gross_above_1000"),
-        "chart matched plus SG gross threshold main",
+        ("false", "true", "appendix_below_main_threshold"),
+        "chart match should not bypass the strict SG gross threshold",
     )
 
 
@@ -952,7 +952,7 @@ def test_sea6_revenue_does_not_affect_main_inclusion():
     )
 
 
-def test_expected_current_split_is_5_main_17_appendix_when_fixture_available():
+def test_expected_current_split_is_4_main_18_appendix_when_fixture_available():
     if not discovery.meeting_mobile_dir("2026-07-28").exists():
         return
     with repo_temp_dir("mobile_current_split_") as tmp:
@@ -964,8 +964,8 @@ def test_expected_current_split_is_5_main_17_appendix_when_fixture_available():
             discovery.TITLE_OVERRIDE_PATH = tmp / "reference" / "game_title_overrides.csv"
             _path, rows, _warnings, _folder, _chart_paths, _translation_path, _translation_rows, _created, _main_path, main_rows, _appendix_path, appendix, _sources, _fallback = discovery.build_meeting_pack("2026-07-28")
             assert_equal(len(rows), 22, "current meeting pack rows")
-            assert_equal(len(main_rows), 5, "current main split")
-            assert_equal(len(appendix), 17, "current appendix split")
+            assert_equal(len(main_rows), 4, "current main split")
+            assert_equal(len(appendix), 18, "current appendix split")
             assert_equal(
                 [row["unified_name"] for row in main_rows],
                 [
@@ -973,7 +973,6 @@ def test_expected_current_split_is_5_main_17_appendix_when_fixture_available():
                     "DIGIMON UP",
                     "hololive Dreams",
                     "車車屍搭普 - 足球狂歡季來臨！",
-                    "Blade Heroes: Mecha Soul",
                 ],
                 "current main report games",
             )
@@ -1020,11 +1019,11 @@ def main():
     test_main_report_rows_have_no_blank_english_report_name()
     test_translation_needed_count_decreases_after_lookup()
     test_main_report_rule_sg_gross_above_3000()
-    test_main_report_rule_chart_matched_and_sg_gross_above_1000()
+    test_main_report_rule_chart_matched_below_3000_stays_appendix()
     test_main_report_rule_old_unmatched_overrides_high_sg_gross()
     test_main_report_rule_zero_download_unmatched_overrides_high_sg_gross()
     test_sea6_revenue_does_not_affect_main_inclusion()
-    test_expected_current_split_is_5_main_17_appendix_when_fixture_available()
+    test_expected_current_split_is_4_main_18_appendix_when_fixture_available()
     print("MOBILE_REVENUE_DISCOVERY_CANDIDATES_TEST_PASS")
 
 

@@ -100,10 +100,10 @@ def main():
         "missing prior revenue must fail the country inclusion gate",
     )
     assert_true(
-        exporter.country_game_is_included(
+        not exporter.country_game_is_included(
             {"id_revenue_gross": "0", "id_revenue_prior_store": "", "known_existing": "true", "manual_inclusion_override": "yes"}, "ID"
         ),
-        "manual approval must be able to override the default exclusion gate",
+        "manual approval must not bypass the strict country revenue gate",
     )
     assert_true(
         not exporter.country_game_is_included(
@@ -416,14 +416,9 @@ def main():
             assert_true("Unknown Prior Game" not in latest_html, "missing prior revenue must not render")
             assert_true("Animals Garden" not in {row["game_title"] for row in payload["sea_summary"]["top_games"]}, "known-existing game must not enter SEA summary")
             assert_true("SG" in latest_html and "MY" in latest_html, "SEA country revenue chips should render")
-            assert_true(
-                exporter.country_game_is_included(
-                    {"game_title": "Approved SG Game", "sg_revenue_gross": "0", "sg_revenue_prior_store": "100", "known_existing": "true"},
-                    "SG",
-                    [{"english_report_name": "Approved SG Game", "report_classification": "mobile_only", "main_report_mobile_candidate": "true"}],
-                ),
-                "approved SG final-report rows should remain eligible for the SG tab",
-            )
+            assert_true("Signal label" not in latest_html, "SEA summary should not render a signal label column")
+            assert_true("Early Revenue Signal" not in latest_html, "early revenue signal labels should not render")
+            assert_true("High Revenue Signal" not in latest_html, "high revenue signal labels should not render")
             for country_code, own_value, other_value in (("my", "$18,000", "$5,000"), ("th", "$0", "$5,000")):
                 panel_start = latest_html.index(f'id="sea-{country_code}"')
                 panel_end = latest_html.find('<section class="sea-view-panel', panel_start + 1)
@@ -447,7 +442,7 @@ def main():
             ph_start = latest_html.index('id="sea-ph"')
             ph_end = latest_html.find('<section class="sea-view-panel', ph_start + 1)
             ph_panel = latest_html[ph_start:ph_end if ph_end >= 0 else None]
-            assert_true("No included new games in Philippines" in ph_panel, "below-threshold PH rows should not be included")
+            assert_true("$2,000" not in ph_panel, "below-threshold PH rows should not be included")
             assert_true(payload["sea_summary"]["country_summaries"]["PH"]["game_count"] == 0, "PH summary should count only PH-qualified games")
             assert_true(payload["sea_summary"]["country_summaries"]["MY"]["game_count"] == 1, "MY summary should count its own qualifying game")
             assert_true('class="sea-non-tab-content"' in latest_html, "methodology content should remain outside country panels")
@@ -456,7 +451,7 @@ def main():
             star_payload = next(row for row in payload["rows"] if row["Game Title"] == "Star Sailors")
             assert_true("prior revenue was $0" in star_payload["Inclusion Reason"], "commercial-signal inclusion reason should stay in data")
             assert_true("prior revenue was $0" not in star_payload["Key Details"], "key details should describe the game, not inclusion logic")
-            assert_true("Included Mobile Games" in latest_html, "country mobile sections should render")
+            assert_true("Mobile + PC Games" in latest_html and "Mobile-only Games" in latest_html and "PC-only Games" in latest_html, "country game sections should be segmented")
             assert_true("Mobile game</span><span class=\"metric-badge neutral\">iOS, Android" not in latest_html, "mobile-only cards should not duplicate platform pills")
             assert_true("Country Snapshot" in latest_html, "country snapshot sections should render")
             assert_true(
@@ -464,7 +459,7 @@ def main():
                 and "N/A means the game was not present in the downloaded chart rows for that platform/country." in latest_html,
                 "country rank limitation note should explain downloaded chart coverage and N/A values",
             )
-            assert_true(latest_html.count("Regional PC Signals") >= 7, "regional PC signals should appear in SEA6 and every country panel")
+            assert_true(latest_html.count("PC-only Games") >= 7, "PC-only game sections should appear in SEA6 and every country panel")
             assert_true("Pass the Fear" in latest_html and "Regional PC signal" in latest_html, "PC-only games should render as regional PC signals")
             pc_cards = re.findall(r'<article class="regional-pc-card">(.*?)</article>', latest_html, flags=re.S)
             assert_true(pc_cards and all("ST Gross Revenue" not in card and "ST Downloads" not in card and "iOS #" not in card and "Android #" not in card for card in pc_cards), "PC signal cards must not show mobile metrics")
