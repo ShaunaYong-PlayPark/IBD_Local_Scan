@@ -981,7 +981,7 @@ def sea_country_card(row, country, report_rows):
 
 RANK_LIMITATION_NOTE = (
     "Rank data reflects the downloaded Sensor Tower chart export. "
-    "N/A means the game was not present in the exported Top 25 chart for that platform/country."
+    "N/A means the game was not present in the downloaded chart rows for that platform/country."
 )
 
 
