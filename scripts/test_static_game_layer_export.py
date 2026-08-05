@@ -331,7 +331,9 @@ def main():
             exported_rows = list(csv.DictReader((docs / "data" / "final_sg_market_scan_current_workflow.csv").open(encoding="utf-8-sig")))
 
             assert_true("Meeting: 04 Aug 2026" in latest_html, "meeting date should come from game layer")
-            assert_true("SEA6 Regional View" in latest_html, "SEA6 regional view should render")
+            assert_true("SEA6 Summary" in latest_html, "SEA6 summary should render")
+            for country_name in ("Singapore", "Malaysia", "Philippines", "Indonesia", "Thailand", "Vietnam"):
+                assert_true(country_name in latest_html, f"{country_name} country view should render")
             assert_true("03 Aug 2026" in latest_html, "SEA ranking data-as-of date should render")
             assert_true("SEA Shared RPG" in latest_html, "SEA top game should render")
             assert_true("SG" in latest_html and "MY" in latest_html, "SEA country revenue chips should render")
