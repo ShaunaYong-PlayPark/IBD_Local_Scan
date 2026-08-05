@@ -339,10 +339,11 @@ def main():
             for country_code in ("sg", "my", "ph", "id", "th", "vn"):
                 assert_true(f'data-sea-target="sea-{country_code}"' in latest_html, f"{country_code} tab should control a country panel")
             css = (docs / "assets" / "static-dashboard.css").read_text(encoding="utf-8")
-            assert_true("--dashboard-header-height" in css, "sticky stack should define shared offsets")
-            assert_true(".site-header{position:sticky!important;top:0!important;z-index:60!important}" in css, "main navigation should be the top sticky layer")
-            assert_true(".slim-context-bar,.compact-topbar{position:sticky!important;top:var(--dashboard-header-height)!important;z-index:50!important}" in css, "brief context should follow the main navigation")
-            assert_true(".sea-country-tabs{position:sticky!important;top:var(--dashboard-tabs-top)!important;z-index:40!important}" in css, "country tab bar should follow the brief context")
+            assert_true("--dashboard-header-height" in css and "--dashboard-tabs-height" in css, "fixed stack should define shared offsets")
+            assert_true(".site-header{position:fixed!important;top:0!important;left:0!important;right:0!important" in css, "main navigation should be the top fixed layer")
+            assert_true(".slim-context-bar,.compact-topbar{position:fixed!important;top:var(--dashboard-header-height)!important" in css, "brief context should follow the main navigation")
+            assert_true(".sea-country-tabs{position:fixed!important;top:var(--dashboard-tabs-top)!important" in css, "country tab bar should follow the brief context")
+            assert_true(".dashboard-page.page-latest main#main-content{padding-top:calc(var(--dashboard-header-height) + var(--dashboard-context-height) + var(--dashboard-tabs-height) + 16px)!important}" in css, "latest content should clear the fixed stack")
             for country_name in ("Singapore", "Malaysia", "Philippines", "Indonesia", "Thailand", "Vietnam"):
                 assert_true(country_name in latest_html, f"{country_name} country view should render")
             assert_true("03 Aug 2026" in latest_html, "SEA ranking data-as-of date should render")
