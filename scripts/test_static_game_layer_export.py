@@ -454,6 +454,11 @@ def main():
             assert_true("Included Mobile Games" in latest_html, "country mobile sections should render")
             assert_true("Mobile game</span><span class=\"metric-badge neutral\">iOS, Android" not in latest_html, "mobile-only cards should not duplicate platform pills")
             assert_true("Country Snapshot" in latest_html, "country snapshot sections should render")
+            assert_true(
+                "Rank data reflects the downloaded Sensor Tower chart export." in latest_html
+                and "N/A means the game was not present in the exported Top 25 chart for that platform/country." in latest_html,
+                "country rank limitation note should explain exported Top 25 coverage and N/A values",
+            )
             assert_true(latest_html.count("Regional PC Signals") >= 7, "regional PC signals should appear in SEA6 and every country panel")
             assert_true("Pass the Fear" in latest_html and "Regional PC signal" in latest_html, "PC-only games should render as regional PC signals")
             pc_cards = re.findall(r'<article class="regional-pc-card">(.*?)</article>', latest_html, flags=re.S)

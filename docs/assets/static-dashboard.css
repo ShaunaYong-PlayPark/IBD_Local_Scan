@@ -256,6 +256,7 @@ button:disabled,.btn[disabled],button[aria-disabled="true"]{opacity:.55;cursor:n
 .sea-country-stats>span{border:1px solid #D9E2EC;background:#fff;border-radius:10px;padding:9px}
 .sea-country-stats b{display:block;color:var(--blue-900);font-size:17px;margin-top:3px}
 .sea-country-note{margin:0;color:#126B59;font-size:12px;font-weight:700}
+.rank-limitation-note{margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.45}
 .sea-game-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
 .sea-game-card{border:1px solid #D7E8E2;background:#FBFEFD;border-radius:14px;padding:14px;display:grid;gap:10px}
 .sea-game-card-heading{display:flex;justify-content:space-between;align-items:start;gap:10px}

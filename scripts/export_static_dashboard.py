@@ -979,6 +979,12 @@ def sea_country_card(row, country, report_rows):
 </article>'''
 
 
+RANK_LIMITATION_NOTE = (
+    "Rank data reflects the downloaded Sensor Tower chart export. "
+    "N/A means the game was not present in the exported Top 25 chart for that platform/country."
+)
+
+
 def sea_country_tabs_nav():
     country_names = {"SG": "Singapore", "MY": "Malaysia", "PH": "Philippines", "ID": "Indonesia", "TH": "Thailand", "VN": "Vietnam"}
     tabs = ['<a class="sea-tab active" href="#sea6-summary" data-sea-target="sea6-summary-panel" aria-selected="true">SEA6 Summary</a>']
@@ -1053,7 +1059,7 @@ def sea_regional_section(sea_games, report_rows, news_context=None):
             heading=f"{name} Game News Context",
         ) if news_context else ""
         panels.append(
-            f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden><div class="section-heading"><div><h2>{name}</h2><p>Country view using {name} Sensor Tower evidence only.</p></div></div><h3 class="country-section-label">Country Snapshot</h3><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><h3 class="country-section-label">Included Mobile Games</h3><div class="sea-country-grid">{cards}</div>{pc_signals}{country_news}</section>'
+            f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden><div class="section-heading"><div><h2>{name}</h2><p>Country view using {name} Sensor Tower evidence only.</p></div></div><h3 class="country-section-label">Country Snapshot</h3><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><p class="rank-limitation-note">{escape(RANK_LIMITATION_NOTE)}</p><h3 class="country-section-label">Included Mobile Games</h3><div class="sea-country-grid">{cards}</div>{pc_signals}{country_news}</section>'
         )
     ranking_as_of = display_date(summary["ranking_data_as_of"]) or "N/A"
     regional_news = news_context_section(regional_news_rows(news_context or []), heading="SEA6 Game News Context", regional=True) if news_context else ""
@@ -1603,6 +1609,7 @@ def write_assets():
 .sea-country-stats>span{border:1px solid #D9E2EC;background:#fff;border-radius:10px;padding:9px}
 .sea-country-stats b{display:block;color:var(--blue-900);font-size:17px;margin-top:3px}
 .sea-country-note{margin:0;color:#126B59;font-size:12px;font-weight:700}
+.rank-limitation-note{margin:0 0 14px;color:var(--muted);font-size:12px;line-height:1.45}
 .sea-game-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px}
 .sea-game-card{border:1px solid #D7E8E2;background:#FBFEFD;border-radius:14px;padding:14px;display:grid;gap:10px}
 .sea-game-card-heading{display:flex;justify-content:space-between;align-items:start;gap:10px}
