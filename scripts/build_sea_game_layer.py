@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import build_mobile_revenue_discovery_candidates as mobile
+from candidate_store import known_existing_unified_ids
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +15,7 @@ SEA6_COUNTRIES = ("SG", "MY", "PH", "ID", "TH", "VN")
 PLATFORMS = ("ios", "android")
 
 OUTPUT_FIELDS = [
+    "unified_id",
     "game_title",
     "original_title",
     "publisher",
@@ -24,6 +26,9 @@ OUTPUT_FIELDS = [
     "sea_st_downloads",
     "countries_detected",
     "top_country_by_revenue",
+    "known_existing",
+    "manual_inclusion_override",
+    "manual_inclusion_reason",
 ]
 for _country in SEA6_COUNTRIES:
     _prefix = _country.lower()
@@ -143,6 +148,7 @@ def build_rows(meeting_date, unified_exports, ranking_files):
     }
     title_overrides = mobile.read_title_overrides()
     master_by_id, master_by_title = mobile.read_master_title_mapping()
+    known_ids = known_existing_unified_ids()
     sg_export = unified_exports["SG"]
     rows = []
     for unified_id, selected in candidates.items():
@@ -187,6 +193,7 @@ def build_rows(meeting_date, unified_exports, ranking_files):
         total_downloads = sum(item["downloads"] for item in by_country.values())
         top_country = max(SEA6_COUNTRIES, key=lambda country: (by_country[country]["revenue"], country))
         output = {
+            "unified_id": unified_id,
             "game_title": english_title,
             "original_title": title,
             "publisher": publisher,
@@ -197,6 +204,9 @@ def build_rows(meeting_date, unified_exports, ranking_files):
             "sea_st_downloads": format_number(total_downloads),
             "countries_detected": ", ".join(countries_detected),
             "top_country_by_revenue": top_country if total_revenue else "",
+            "known_existing": "true" if unified_id in known_ids else "false",
+            "manual_inclusion_override": "",
+            "manual_inclusion_reason": "",
             "report_start_date": sg_export["report_start"].isoformat(),
             "report_end_date": sg_export["report_end"].isoformat(),
             "ranking_data_as_of": ranking_as_of,

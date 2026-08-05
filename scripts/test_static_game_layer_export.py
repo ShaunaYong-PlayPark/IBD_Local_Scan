@@ -65,14 +65,15 @@ NEWS_FIELDS = [
 ]
 
 SEA_FIELDS = [
-    "game_title", "original_title", "publisher", "developer", "genre", "platforms",
+    "unified_id", "game_title", "original_title", "publisher", "developer", "genre", "platforms",
     "sea_st_gross_revenue", "sea_st_downloads", "countries_detected", "top_country_by_revenue",
-    "sg_revenue_gross", "sg_downloads", "sg_ios_rank", "sg_android_rank",
-    "my_revenue_gross", "my_downloads", "my_ios_rank", "my_android_rank",
-    "ph_revenue_gross", "ph_downloads", "ph_ios_rank", "ph_android_rank",
-    "id_revenue_gross", "id_downloads", "id_ios_rank", "id_android_rank",
-    "th_revenue_gross", "th_downloads", "th_ios_rank", "th_android_rank",
-    "vn_revenue_gross", "vn_downloads", "vn_ios_rank", "vn_android_rank",
+    "known_existing", "manual_inclusion_override", "manual_inclusion_reason",
+    "sg_revenue_gross", "sg_revenue_prior_store", "sg_downloads", "sg_ios_rank", "sg_android_rank",
+    "my_revenue_gross", "my_revenue_prior_store", "my_downloads", "my_ios_rank", "my_android_rank",
+    "ph_revenue_gross", "ph_revenue_prior_store", "ph_downloads", "ph_ios_rank", "ph_android_rank",
+    "id_revenue_gross", "id_revenue_prior_store", "id_downloads", "id_ios_rank", "id_android_rank",
+    "th_revenue_gross", "th_revenue_prior_store", "th_downloads", "th_ios_rank", "th_android_rank",
+    "vn_revenue_gross", "vn_revenue_prior_store", "vn_downloads", "vn_ios_rank", "vn_android_rank",
     "report_start_date", "report_end_date", "ranking_data_as_of", "meeting_date", "source_files",
 ]
 
@@ -91,6 +92,18 @@ def assert_true(value, message):
 
 
 def main():
+    assert_true(
+        not exporter.country_game_is_included(
+            {"id_revenue_gross": "7000", "id_revenue_prior_store": "", "known_existing": "false"}, "ID"
+        ),
+        "missing prior revenue must fail the country inclusion gate",
+    )
+    assert_true(
+        exporter.country_game_is_included(
+            {"id_revenue_gross": "0", "id_revenue_prior_store": "", "known_existing": "true", "manual_inclusion_override": "yes"}, "ID"
+        ),
+        "manual approval must be able to override the default exclusion gate",
+    )
     assert_true(
         exporter.continuity_table_text(
             "Mobile version was first covered in the 21 Jul 2026 brief. This report adds the later Steam PC release."
@@ -300,6 +313,7 @@ def main():
                 meeting_dir / "sea_game_layer.csv",
                 [
                     {
+                        "unified_id": "shared-rpg",
                         "game_title": "SEA Shared RPG",
                         "original_title": "SEA Shared RPG",
                         "publisher": "SEA Publisher",
@@ -309,12 +323,34 @@ def main():
                         "sea_st_downloads": "12000",
                         "countries_detected": "SG, MY, PH",
                         "top_country_by_revenue": "MY",
+                        "known_existing": "false",
                         "sg_revenue_gross": "5000",
+                        "sg_revenue_prior_store": "0",
                         "my_revenue_gross": "18000",
+                        "my_revenue_prior_store": "0",
                         "ph_revenue_gross": "2000",
+                        "ph_revenue_prior_store": "0",
                         "ranking_data_as_of": "2026-08-03",
                         "meeting_date": "2026-08-04",
-                    }
+                    },
+                    {
+                        "unified_id": "animals-garden-id",
+                        "game_title": "Animals Garden",
+                        "original_title": "Animals Garden",
+                        "sea_st_gross_revenue": "5000",
+                        "id_revenue_gross": "5000",
+                        "id_revenue_prior_store": "0",
+                        "known_existing": "true",
+                        "meeting_date": "2026-08-04",
+                    },
+                    {
+                        "unified_id": "unknown-prior",
+                        "game_title": "Unknown Prior Game",
+                        "original_title": "Unknown Prior Game",
+                        "sea_st_gross_revenue": "7000",
+                        "sg_revenue_gross": "7000",
+                        "meeting_date": "2026-08-04",
+                    },
                 ],
                 SEA_FIELDS,
             )
@@ -366,6 +402,9 @@ def main():
                 assert_true(country_name in latest_html, f"{country_name} country view should render")
             assert_true("03 Aug 2026" in latest_html, "SEA ranking data-as-of date should render")
             assert_true("SEA Shared RPG" in latest_html, "SEA top game should render")
+            assert_true("Animals Garden" not in latest_html, "known-existing Animals Garden must not render")
+            assert_true("Unknown Prior Game" not in latest_html, "missing prior revenue must not render")
+            assert_true("Animals Garden" not in {row["game_title"] for row in payload["sea_summary"]["top_games"]}, "known-existing game must not enter SEA summary")
             assert_true("SG" in latest_html and "MY" in latest_html, "SEA country revenue chips should render")
             for country_code, own_value, other_value in (("my", "$18,000", "$5,000"), ("th", "$0", "$5,000")):
                 panel_start = latest_html.index(f'id="sea-{country_code}"')

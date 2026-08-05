@@ -580,12 +580,18 @@ SEA6_COUNTRIES = ("SG", "MY", "PH", "ID", "TH", "VN")
 
 def country_game_is_included(row, country):
     prefix = country.lower()
-    revenue = safe_float(row.get(f"{prefix}_revenue_gross"))
-    if revenue >= 3000:
+    override = str(row.get("manual_inclusion_override") or "").strip().lower() in {"1", "true", "yes", "approved"}
+    if override:
         return True
+    known_existing = str(row.get("known_existing") or "").strip().lower() in {"1", "true", "yes"}
+    if known_existing:
+        return False
+    revenue = safe_float(row.get(f"{prefix}_revenue_gross"))
     ranked = bool(row.get(f"{prefix}_ios_rank") or row.get(f"{prefix}_android_rank"))
     prior_value = str(row.get(f"{prefix}_revenue_prior_store") or "").strip()
-    return ranked and prior_value != "" and safe_float(prior_value) == 0 and revenue >= 1000
+    if prior_value == "" or safe_float(prior_value) != 0:
+        return False
+    return revenue >= 3000 or (ranked and revenue >= 1000)
 
 
 def included_country_games(sea_games, report_rows=None, country="SG"):
