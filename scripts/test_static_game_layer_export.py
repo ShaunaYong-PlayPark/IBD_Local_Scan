@@ -338,7 +338,11 @@ def main():
             assert_true('data-sea-target="sea6-summary-panel"' in latest_html, "SEA6 tab should control the summary panel")
             for country_code in ("sg", "my", "ph", "id", "th", "vn"):
                 assert_true(f'data-sea-target="sea-{country_code}"' in latest_html, f"{country_code} tab should control a country panel")
-            assert_true(".sea-country-tabs{position:sticky" in (docs / "assets" / "static-dashboard.css").read_text(encoding="utf-8"), "country tab bar should be sticky")
+            css = (docs / "assets" / "static-dashboard.css").read_text(encoding="utf-8")
+            assert_true("--dashboard-header-height" in css, "sticky stack should define shared offsets")
+            assert_true(".site-header{position:sticky!important;top:0!important;z-index:60!important}" in css, "main navigation should be the top sticky layer")
+            assert_true(".slim-context-bar,.compact-topbar{position:sticky!important;top:var(--dashboard-header-height)!important;z-index:50!important}" in css, "brief context should follow the main navigation")
+            assert_true(".sea-country-tabs{position:sticky!important;top:var(--dashboard-tabs-top)!important;z-index:40!important}" in css, "country tab bar should follow the brief context")
             for country_name in ("Singapore", "Malaysia", "Philippines", "Indonesia", "Thailand", "Vietnam"):
                 assert_true(country_name in latest_html, f"{country_name} country view should render")
             assert_true("03 Aug 2026" in latest_html, "SEA ranking data-as-of date should render")

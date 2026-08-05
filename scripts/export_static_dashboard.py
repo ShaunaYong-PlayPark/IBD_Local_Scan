@@ -1604,6 +1604,21 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
   .stat-grid{grid-template-columns:1fr!important}
   .view-toggle{display:grid!important;grid-template-columns:1fr 1fr!important;width:100%!important}
 }
+
+/* Keep the dashboard navigation as one predictable vertical stack. */
+:root{--dashboard-header-height:56px;--dashboard-context-height:46px;--dashboard-tabs-top:102px}
+.site-header{position:sticky!important;top:0!important;z-index:60!important}
+.slim-context-bar,.compact-topbar{position:sticky!important;top:var(--dashboard-header-height)!important;z-index:50!important}
+.sea-country-tabs{position:sticky!important;top:var(--dashboard-tabs-top)!important;z-index:40!important}
+@media(max-width:1180px){
+  :root{--dashboard-header-height:100px;--dashboard-context-height:64px;--dashboard-tabs-top:164px}
+}
+@media(max-width:768px){
+  :root{--dashboard-header-height:164px;--dashboard-context-height:120px;--dashboard-tabs-top:284px}
+}
+@media(max-width:430px){
+  :root{--dashboard-header-height:252px;--dashboard-context-height:170px;--dashboard-tabs-top:422px}
+}
 """
     write_text(ASSETS / "static-dashboard.css", css)
     write_text(
