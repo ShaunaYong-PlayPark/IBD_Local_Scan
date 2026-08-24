@@ -563,7 +563,7 @@ def main():
             assert_true(latest_html.count("PC-only Games") >= 7, "PC-only game sections should appear in SEA6 and every country panel")
             assert_true("Pass the Fear" in latest_html and "PC-only" in latest_html, "PC-only games should render as regional PC cards")
             assert_true("SteamDB provides global PC release evidence. Country-level revenue is not available." in latest_html, "PC-only section should explain global SteamDB scope")
-            assert_true("1. Singapore &mdash; $10,000" in latest_html and "2. Malaysia &mdash; $6,000" in latest_html and "3. Thailand &mdash; $4,000" in latest_html, "SEA6 mobile cards should show valid top markets")
+            assert_true("market-rank-1" in latest_html and "Singapore" in latest_html and "$10,000" in latest_html and "Malaysia" in latest_html and "$6,000" in latest_html and "Thailand" in latest_html and "$4,000" in latest_html, "SEA6 mobile cards should show valid ranked markets")
             assert_true(
                 exporter.top_sea_revenue_markets(
                     {"sea_market_1_country": "TH", "sea_market_1_revenue_gross": "4000", "sea_market_2_country": "MY", "sea_market_2_revenue_gross": "6000", "sea_market_3_country": "SG", "sea_market_3_revenue_gross": "10000", "sea_market_4_country": "SG", "sea_market_4_revenue_gross": "9000"}

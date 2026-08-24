@@ -949,16 +949,30 @@ def top_sea_revenue_markets_html(row):
     markets = top_sea_revenue_markets(row)
     if not markets:
         return ""
-    values = " ".join(
-        f'<span class="metric-badge neutral">{index}. {escape(country)} &mdash; {escape(money(revenue))}</span>'
+    values = "".join(
+        f'<li class="sea-market-row market-rank-{index}"><span class="market-rank-number">{index}</span><span class="market-country">{escape(country)}</span><b>{escape(money(revenue))}</b></li>'
         for index, (country, revenue) in enumerate(markets, 1)
     )
-    return f'<div class="sea-market-context"><b>Top SEA6 Revenue Markets</b>{values}</div>'
+    return f'<div class="sea-market-context"><b>Top SEA6 Revenue Markets</b><ol class="sea-market-list">{values}</ol></div>'
 
 
 def matching_report_row(row, report_rows):
     key = normalized_key(row.get("game_title") or row.get("original_title"))
     return next((item for item in report_rows if normalized_key(title_for(item)) == key), {})
+
+
+def mobile_release_display(row, report_row, country):
+    """Return a proven country-specific label/date, or a general release label/date."""
+    country_field = f"{country.lower()}_mobile_release_date"
+    country_date = str(row.get(country_field) or "").strip()
+    invalid_values = {"N/A", "NA", "NONE", "NULL", "0"}
+    if country_date and country_date.upper() not in invalid_values:
+        return f"Mobile release in {SEA6_COUNTRY_NAMES[country]}", country_date
+
+    general_date = str(report_row.get("Release Date") or report_row.get("release_date") or "").strip()
+    if general_date and general_date.upper() not in invalid_values:
+        return "First recorded mobile release", general_date
+    return "", ""
 
 
 def steam_context_html(report_row, label="PC equivalent / Steam context"):
@@ -979,13 +993,15 @@ def sea_regional_mobile_card(row, report_rows):
     original = row.get("original_title") or ""
     original_html = f'<p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
     classification = "Mobile + PC" if report_row.get("report_classification") == "mobile_led_cross_platform" else "Mobile-only"
-    developer_html = f'<span class="sea-company-meta"><b>Developer</b> {escape(developer)}</span>' if developer else ""
+    developer_html = f'<p class="sea-company-meta"><b>Developer</b><span>{escape(developer)}</span></p>' if developer else ""
+    genre_html = f'<span class="genre-tag">{escape(genre)}</span>' if genre else ""
     return f'''<article class="sea-country-card">
   <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(classification)}</span></div>
 {original_html}
-  <p class="sea-company-meta"><b>Publisher</b> {escape(publisher)} {developer_html}</p>
-  <p class="sea-game-summary">{escape(summary)}</p>
+  <div class="sea-company-stack"><p class="sea-company-meta"><b>Publisher</b><span>{escape(publisher)}</span></p>{developer_html}</div>
+  <div class="meta-chip-row">{genre_html}</div>
   <div class="sea-country-stats"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(row.get("sea_st_gross_revenue")))}</b></span><span><small>SEA6 ST Downloads</small><b>{escape(number(row.get("sea_st_downloads")))}</b></span></div>
+  <p class="sea-game-summary">{escape(summary)}</p>
   {top_sea_revenue_markets_html(row)}
   <div class="meta-chip-row"><span class="metric-badge neutral">{escape(platforms)}</span></div>
 {steam_context_html(report_row)}
@@ -1017,6 +1033,21 @@ def news_why_matters(row):
     return str(row.get("why_it_matters") or row.get("editor_note") or "Included as relevant gaming context for this report.").strip()
 
 
+def steam_rating_percent(row):
+    """Return an existing Steam rating percentage, when supplied by source data."""
+    for field in ("steamdb_rating_percent", "steam_rating_percent", "rating_percentage", "steamdb_rating"):
+        value = str(row.get(field) or "").strip().replace("%", "")
+        if not value:
+            continue
+        try:
+            number_value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= number_value <= 100:
+            return f"{number_value:g}"
+    return ""
+
+
 def regional_pc_signals(report_rows, anchor_id="sea6-pc-only-games"):
     rows = [row for row in report_rows if row.get("report_classification") == "pc_only"]
     if not rows:
@@ -1026,8 +1057,10 @@ def regional_pc_signals(report_rows, anchor_id="sea6-pc-only-games"):
         title = title_for(row)
         url = str(row.get("steam_url") or "").strip()
         url_html = f'<a href="{escape(url)}" rel="noopener" target="_blank">Steam URL</a>' if url else "Steam URL N/A"
+        rating = steam_rating_percent(row)
+        rating_html = f'<div class="pc-stat"><small>Rating</small><b>{escape(rating)}%</b></div>' if rating else ""
         cards.append(
-            f'<article class="regional-pc-card"><div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">PC-only</span></div><div class="meta-chip-row"><span class="metric-badge neutral">Release {escape(display_date(row.get("Release Date")) or row.get("Release Date") or "N/A")}</span><span class="metric-badge neutral">Steam peak {escape(number(row.get("steamdb_peak")))}</span><span class="metric-badge neutral">Reviews {escape(number(row.get("steamdb_reviews")))}</span></div><p class="sea-game-summary">{escape(row.get("Inclusion Reason") or row.get("Key Details") or "Included by the SteamDB PC rule.")}</p><p class="sea-company-meta">{url_html}</p></article>'
+            f'<article class="regional-pc-card"><div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">PC-only</span></div><div class="pc-release-meta"><small>Release date</small><b>{escape(display_date(row.get("Release Date")) or row.get("Release Date") or "N/A")}</b></div><div class="pc-stat-grid"><div class="pc-stat"><small>Steam peak</small><b>{escape(number(row.get("steamdb_peak")))}</b></div><div class="pc-stat"><small>Reviews</small><b>{escape(number(row.get("steamdb_reviews")))}</b></div>{rating_html}</div><p class="sea-game-summary">{escape(row.get("Inclusion Reason") or row.get("Key Details") or "Included by the SteamDB PC rule.")}</p><p class="sea-company-meta">{url_html}</p></article>'
         )
     content = "".join(cards) or empty_state("No PC-only games qualified in this brief", "SteamDB provided no qualifying PC-only release evidence for this period.")
     return f'<section class="regional-pc-signals" id="{escape(anchor_id)}"><h3 class="signal-heading">PC-only Games</h3><p class="section-description">SteamDB provides global PC release evidence. Country-level revenue is not available.</p><div class="sea-country-grid">{content}</div></section>'
@@ -1075,9 +1108,11 @@ def sea_country_card(row, country, report_rows):
     original = row.get("original_title") or ""
     title = row.get("game_title") or original or "Untitled"
     original_html = f'<p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
-    developer_html = f'<span class="sea-company-meta"><b>Developer</b> {escape(developer)}</span>' if developer else ""
+    developer_html = f'<p class="sea-company-meta"><b>Developer</b><span>{escape(developer)}</span></p>' if developer else ""
     note = sea_country_note(row, country)
     classification_label = "Mobile + PC" if report_row.get("report_classification") == "mobile_led_cross_platform" else "Mobile game"
+    genre_html = f'<span class="genre-tag">{escape(genre)}</span>' if genre else ""
+    release_label, release_date = mobile_release_display(row, report_row, country)
     rank_html = "".join(
         f'<span class="metric-badge neutral">{label} #{escape(str(row.get(field) or "N/A"))}</span>'
         for label, field in (("iOS", f"{prefix}_ios_rank"), ("Android", f"{prefix}_android_rank"))
@@ -1085,9 +1120,11 @@ def sea_country_card(row, country, report_rows):
     return f'''<article class="sea-country-card">
   <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(classification_label)}</span></div>
 {original_html}
-  <p class="sea-company-meta"><b>Publisher</b> {escape(publisher)} {developer_html}</p>
-  <p class="sea-game-summary">{escape(summary)}</p>
+  <div class="sea-company-stack"><p class="sea-company-meta"><b>Publisher</b><span>{escape(publisher)}</span></p>{developer_html}</div>
+  <div class="meta-chip-row">{genre_html}</div>
   <div class="sea-country-stats"><span><small>ST Gross Revenue</small><b>{escape(money(row.get(f"{prefix}_revenue_gross")))}</b></span><span><small>ST Downloads</small><b>{escape(number(row.get(f"{prefix}_downloads")))}</b></span></div>
+  {f'<p class="country-release-date"><b>{escape(release_label)}</b> {escape(display_date(release_date) or release_date)}</p>' if release_date else ''}
+  <p class="sea-game-summary">{escape(summary)}</p>
   {top_sea_revenue_markets_html(row)}
   <div class="meta-chip-row">{rank_html}</div>
 {steam_context_html(report_row)}
@@ -1265,7 +1302,7 @@ def signal_card(row, group):
     return f"""<article class="signal-card {card_class}">
   <div class="card-overview">
     <h3>{escape(title)}</h3>
-    <p class="publisher-line">{escape(row.get("Publisher") or "Publisher unavailable")}</p>
+    <div class="company-stack"><p class="publisher-line"><small>Publisher</small><span>{escape(row.get("Publisher") or "Publisher unavailable")}</span></p>{f'<p class="publisher-line"><small>Developer</small><span>{escape(row.get("Developer"))}</span></p>' if row.get("Developer") else ''}</div>
     <div class="meta-chip-row">
       {value_chips(row.get("Platform") or "Platform unavailable")}
       {value_chips(row.get("Genre") or "Genre unavailable")}
@@ -1319,6 +1356,7 @@ def report_table(rows, released=False):
 
 def tracker_table(rows):
     fields = [
+        "Related Brief",
         "Game Title",
         "Publisher",
         "Developer",
@@ -1337,11 +1375,27 @@ def tracker_table(rows):
     ]
     head = "".join(f"<th>{escape(field)}</th>" for field in fields)
     body = "".join(
-        "<tr>" + "".join(table_cell(row, field) for field in fields) + "</tr>"
+        f'<tr class="tracker-row"{tracker_sort_attributes(row)}>' + "".join(table_cell(row, field) for field in fields) + "</tr>"
         for row in rows
     )
     empty = f'<tr><td colspan="{len(fields)}">No tracker rows available.</td></tr>'
     return f'<div class="data-table released-table"><table><thead><tr>{head}</tr></thead><tbody>{body or empty}</tbody></table></div>'
+
+
+def tracker_sort_attributes(row):
+    values = {
+        "date": row.get("Release Date") or row.get("meeting_date") or "",
+        "revenue": safe_float(row.get("SG Gross Revenue")),
+        "downloads": safe_float(row.get("SG Downloads")),
+        "country": row.get("Country") or row.get("countries_detected") or "",
+        "title": title_for(row),
+        "platform": row.get("Platform") or "",
+        "publisher": row.get("Publisher") or "",
+        "developer": row.get("Developer") or "",
+        "year": str(row.get("meeting_date") or row.get("report_end_date") or "")[:4],
+        "month": str(row.get("meeting_date") or row.get("report_end_date") or "")[5:7],
+    }
+    return "".join(f' data-sort-{key}="{escape(str(value))}"' for key, value in values.items())
 
 
 def table_cell(row, field):
@@ -1379,7 +1433,8 @@ def table_cell(row, field):
         href = row.get("_brief_href", "")
         text = value or row.get("_brief_label", "")
         if href:
-            return f'<td><a href="{escape(href)}">{escape(text)}</a></td>'
+            period = row.get("_brief_period") or text
+            return f'<td class="tracker-brief-cell"><a class="brief-icon-link" href="{escape(href)}" title="Open brief: {escape(period)}" aria-label="Open brief for {escape(period)}"><span aria-hidden="true">▣</span></a><span class="brief-period">{escape(period)}</span></td>'
         return f"<td>{escape(str(text or ''))}</td>"
     if field == "Continuity":
         href = row.get("Continuity Brief Href", "")
@@ -1551,7 +1606,7 @@ def proof_archive_cards(records):
     cards = []
     for record in records:
         cards.append(
-            f"""<article class="archive-card reading-card">
+            f"""<article class="archive-card reading-card" data-archive-year="{escape(record["folder"][:4])}" data-archive-month="{escape(record["folder"][5:7])}">
   <div class="archive-main">
     <span class="status-chip neutral">Proof run</span>
     <h3>{escape(record["meeting"])} mock report</h3>
@@ -1590,6 +1645,8 @@ def tracker_rows_across_briefs(fallback_rows):
             tracker_row["Related Brief"] = f'{label} | {record["period"]}'
             tracker_row["_brief_label"] = label
             tracker_row["_brief_href"] = record["href"]
+            tracker_row["_brief_period"] = record["period"]
+            tracker_row["meeting_date"] = record["meeting_key"]
             tracker_rows.append(tracker_row)
     return tracker_rows
 
@@ -1612,7 +1669,7 @@ def historical_page(rows, schedule, metadata, weekly_summary=None):
     body = (
         page_header("Historical Briefs", "Brief archive", "Open past market briefs by reporting period. The current latest brief stays separate.")
         + latest_callout
-        + '<section class="archive-toolbar"><a class="btn primary" href="latest-brief.html">Latest</a><input type="search" id="archiveSearch" placeholder="Search briefs"></section>'
+        + '<section class="archive-toolbar" aria-label="Archive filters"><a class="btn primary" href="latest-brief.html">Latest</a><label>Year <select id="archiveYear"><option value="all">All</option></select></label><label>Month <select id="archiveMonth"><option value="all">All</option><option value="01">January</option><option value="02">February</option><option value="03">March</option><option value="04">April</option><option value="05">May</option><option value="06">June</option><option value="07">July</option><option value="08">August</option><option value="09">September</option><option value="10">October</option><option value="11">November</option><option value="12">December</option></select></label><input type="search" id="archiveSearch" placeholder="Search briefs" aria-label="Search briefs"></section>'
         + f'<div class="combined-archive-grid"><section><h2>Historical reports</h2><div class="archive-grid">{archive_cards}</div></section>'
         + f'<aside class="combined-timeline"><h2>Upcoming / In progress</h2><div class="timeline-list compact"><article class="timeline-item"><div class="timeline-date"><span>Next meeting</span><b>{escape(display_date(schedule.get("upcoming_meeting_date", "")) or "N/A")}</b></div><div class="timeline-detail"><h3>{escape(in_progress_start or "N/A")} to {escape(in_progress_end or "N/A")}</h3><p>{escape(staging_note)}</p></div></article></div></aside></div>'
     )
@@ -1623,8 +1680,12 @@ def tracker_page(rows, schedule, metadata):
     tracker_rows = tracker_rows_across_briefs(rows)
     body = (
         page_header("Game Tracker", "Games mentioned across briefs", "A structured working view for games, publishers, status, and related brief evidence.")
-        + """<section class="tracker-filters control-panel">
-  <label>Search <input id="trackerSearch" placeholder="Game, publisher, genre"></label>
+        + """<section class="tracker-filters control-panel" aria-label="Game Tracker filters">
+  <label>Search <input id="trackerSearch" placeholder="Game, publisher, genre" aria-label="Search games"></label>
+  <label>Year <select id="trackerYear"><option value="all">All</option></select></label>
+  <label>Month <select id="trackerMonth"><option value="all">All</option><option value="01">January</option><option value="02">February</option><option value="03">March</option><option value="04">April</option><option value="05">May</option><option value="06">June</option><option value="07">July</option><option value="08">August</option><option value="09">September</option><option value="10">October</option><option value="11">November</option><option value="12">December</option></select></label>
+  <label>Sort <select id="trackerSort"><option value="date">Date</option><option value="revenue">Gross revenue</option><option value="downloads">Downloads</option><option value="country">Country</option><option value="title">Game title A-Z</option><option value="platform">Platform</option><option value="publisher">Publisher</option><option value="developer">Developer</option></select></label>
+  <label>Order <select id="trackerSortDirection"><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
   <button type="button" id="clearTrackerFilters">Clear</button>
 </section>
 <div class="filter-chips"><span>Filters</span><a class="filter-chip" href="latest-brief.html"><span>Open</span>Latest brief</a></div>"""
@@ -1942,11 +2003,81 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 @media(max-width:430px){
   :root{--dashboard-header-height:252px;--dashboard-secondary-height:156px}
 }
+
+/* Executive-density UI pass: compact chrome, readable metrics, and stable side navigation. */
+:root{--dashboard-header-height:52px;--dashboard-secondary-height:54px}
+.site-header{min-height:52px!important;padding:7px clamp(14px,2vw,24px)!important}
+.fixed-secondary-row{min-height:54px!important;padding:5px clamp(12px,2vw,24px)!important}
+.fixed-secondary-inner{min-height:44px!important;gap:10px!important}
+.sea-tab{padding:5px 8px!important;min-height:28px!important}
+.on-page-nav{float:left!important;position:sticky!important;top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 12px)!important;margin:0 12px 8px -52px!important;width:38px!important}
+.on-page-toggle{width:38px!important;min-height:36px!important;padding:7px!important;box-shadow:0 3px 10px rgba(9,30,66,.10)}
+.on-page-nav[aria-expanded="true"]{width:190px!important;margin-right:8px!important}
+.on-page-nav[aria-expanded="true"] .on-page-toggle{width:190px!important}
+.on-page-links a.is-current{background:#EAF1FF;color:var(--blue-900);font-weight:900;border-left:3px solid #126B59}
+.sea-company-stack{display:grid;gap:4px}
+.company-stack{display:grid;gap:4px}
+.company-stack .publisher-line{display:grid;grid-template-columns:72px minmax(0,1fr);gap:6px;align-items:baseline;margin:0!important}
+.company-stack .publisher-line small{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#73869B;font-weight:900}
+.company-stack .publisher-line span{color:var(--ink-2);font-size:13px}
+.sea-company-meta{display:grid!important;grid-template-columns:72px minmax(0,1fr);gap:6px;align-items:baseline}
+.sea-company-meta b{margin:0!important}
+.sea-country-stats{margin-top:2px}
+.sea-country-stats>span{padding:8px 9px;border-top:3px solid #16806A}
+.sea-country-stats b{font-size:18px}
+.genre-tag{display:inline-flex;align-items:center;border:1px solid #BFD8F5;background:#EEF6FF;color:#174C82;border-radius:7px;padding:4px 8px;font-size:11px;font-weight:900}
+.country-release-date{margin:0;color:#126B59;font-size:12px;font-weight:800}
+.country-release-date b{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#73869B;margin-right:4px}
+.sea-market-context{border-top:1px solid #D9E2EC;padding-top:9px}
+.sea-market-context>b{display:block;color:#40566F;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.sea-market-list{display:grid;gap:2px;margin:0;padding:0;list-style:none}
+.sea-market-row{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:7px;align-items:center;padding:4px 5px;border-radius:6px;font-size:12px}
+.sea-market-row.market-rank-1{background:#FFF7E6;color:#805600}
+.market-rank-number{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:#EEF2F7;color:#536579;font-weight:900;font-size:11px}
+.market-rank-1 .market-rank-number{background:#F6C453;color:#573800}
+.sea-market-row b{font-variant-numeric:tabular-nums;color:var(--blue-900)}
+.pc-release-meta{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #D9E2EC;padding-bottom:8px}
+.pc-release-meta small,.pc-stat small{display:block;color:#73869B;font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:900}
+.pc-release-meta b{color:var(--blue-900);font-size:14px}
+.pc-stat-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.pc-stat{border:1px solid #D9E2EC;background:#fff;border-radius:8px;padding:7px}
+.pc-stat b{display:block;margin-top:3px;color:var(--blue-900);font-size:15px}
+.archive-toolbar{align-items:end!important;gap:8px!important}
+.archive-toolbar label,.tracker-filters label{display:grid;gap:4px;font-size:10px!important;letter-spacing:.05em;font-weight:900;color:#73869B}
+.archive-toolbar select,.archive-toolbar input,.tracker-filters select,.tracker-filters input{min-height:34px!important;padding:6px 9px!important}
+.archive-card[hidden],.tracker-row[hidden]{display:none!important}
+.archive-card.reading-card{padding:14px!important;gap:9px!important}
+.archive-card .archive-main h3{font-size:18px!important;margin:5px 0 4px!important}
+.archive-card .archive-main p{font-size:13px!important}
+.archive-card .archive-meta{font-size:11px!important;gap:6px!important}
+.tracker-filters{align-items:end!important;gap:8px!important}
+.tracker-filters button{min-height:34px!important}
+.tracker-brief-cell{display:flex;align-items:center;gap:7px;min-width:150px}
+.brief-icon-link{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid #BFD8F5;border-radius:7px;background:#EEF6FF;color:#174C82;text-decoration:none;font-size:15px}
+.brief-icon-link:hover,.brief-icon-link:focus-visible{background:#126B59;color:#fff}
+.brief-period{font-size:11px;color:#536579;line-height:1.25}
+.data-table th:first-child,.data-table td:first-child{position:sticky;left:0;z-index:2;background:#fff}
+@media(max-width:768px){
+  :root{--dashboard-header-height:132px;--dashboard-secondary-height:104px}
+  .on-page-nav{float:none!important;position:relative!important;top:auto!important;width:100%!important;margin:0 0 10px!important}
+  .on-page-nav[aria-expanded="true"]{width:100%!important;margin-right:0!important}
+  .on-page-toggle,.on-page-nav[aria-expanded="true"] .on-page-toggle{width:auto!important}
+  .pc-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .archive-toolbar,.tracker-filters{align-items:stretch!important}
+  .archive-toolbar label,.archive-toolbar select,.archive-toolbar input,.tracker-filters label,.tracker-filters select,.tracker-filters input,.tracker-filters button{width:100%!important}
+  .data-table{overflow-x:auto!important}
+  .data-table th:first-child,.data-table td:first-child{position:static}
+}
 """
     write_text(ASSETS / "static-dashboard.css", css)
     write_text(
         ASSETS / "static-dashboard.js",
-        """document.addEventListener('DOMContentLoaded',()=>{const seaTabs=[...document.querySelectorAll('[data-sea-target]')];const seaPanels=[...document.querySelectorAll('.sea-view-panel')];const bookmarkNavs=[...document.querySelectorAll('.on-page-nav')];function selectSea(target,updateHash=true){seaTabs.forEach(tab=>{const active=tab.dataset.seaTarget===target;tab.classList.toggle('active',active);tab.setAttribute('aria-selected',active?'true':'false')});seaPanels.forEach(panel=>{const active=panel.id===target;panel.classList.toggle('active',active);panel.hidden=!active});if(updateHash){history.replaceState(null,'','#'+(target==='sea6-summary-panel'?'sea6-summary':target))}}function panelForHash(hash){const target=document.getElementById(hash);return target?target.closest('.sea-view-panel'):null}if(seaTabs.length){const hash=location.hash.replace('#','');const hashPanel=panelForHash(hash);const initial=hash==='sea6-summary'?'sea6-summary-panel':(hashPanel?hashPanel.id:(seaPanels.some(panel=>panel.id===hash)?hash:'sea6-summary-panel'));selectSea(initial,false);if(hashPanel&&hash!==initial){requestAnimationFrame(()=>document.getElementById(hash)?.scrollIntoView())};seaTabs.forEach(tab=>tab.addEventListener('click',event=>{event.preventDefault();selectSea(tab.dataset.seaTarget,true)}))}bookmarkNavs.forEach(nav=>{const toggle=nav.querySelector('.on-page-toggle');toggle.addEventListener('click',()=>{const open=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!open));nav.setAttribute('aria-expanded',String(!open))});nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>{toggle.setAttribute('aria-expanded','false');nav.setAttribute('aria-expanded','false')}))});const params=new URLSearchParams(location.search);const current=params.get('view')==='table'?'table':'cards';if(current==='table'){document.body.classList.add('table-mode')}document.querySelectorAll('.view-toggle a').forEach(link=>{const url=new URL(link.href,location.href);const mode=url.searchParams.get('view')==='table'?'table':'cards';if(mode===current){link.classList.add('active');link.setAttribute('aria-current','true')}else{link.classList.remove('active');link.setAttribute('aria-current','false')}});const search=document.getElementById('trackerSearch');const clear=document.getElementById('clearTrackerFilters');function filterRows(){const q=(search&&search.value||'').toLowerCase();document.querySelectorAll('.data-table tbody tr').forEach(row=>{const text=row.textContent.toLowerCase();row.style.display=!q||text.includes(q)?'':'none'})}if(search)search.addEventListener('input',filterRows);if(clear)clear.addEventListener('click',()=>{if(search)search.value='';filterRows()})});""",
+        """document.addEventListener('DOMContentLoaded',()=>{const seaTabs=[...document.querySelectorAll('[data-sea-target]')];const seaPanels=[...document.querySelectorAll('.sea-view-panel')];const bookmarkNavs=[...document.querySelectorAll('.on-page-nav')];const topOffset=()=>parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dashboard-header-height'))+parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dashboard-secondary-height'))+16;function selectSea(target,updateHash=true){seaTabs.forEach(tab=>{const active=tab.dataset.seaTarget===target;tab.classList.toggle('active',active);tab.setAttribute('aria-selected',active?'true':'false')});seaPanels.forEach(panel=>{const active=panel.id===target;panel.classList.toggle('active',active);panel.hidden=!active});if(updateHash){history.replaceState(null,'','#'+(target==='sea6-summary-panel'?'sea6-summary':target))}}function scrollToTarget(target){const element=document.getElementById(target);if(!element)return;window.scrollTo({top:element.getBoundingClientRect().top+window.scrollY-topOffset(),behavior:'smooth'})}function panelForHash(hash){const target=document.getElementById(hash);return target?target.closest('.sea-view-panel'):null}if(seaTabs.length){const hash=location.hash.replace('#','');const hashPanel=panelForHash(hash);const initial=hash==='sea6-summary'?'sea6-summary-panel':(hashPanel?hashPanel.id:(seaPanels.some(panel=>panel.id===hash)?hash:'sea6-summary-panel'));selectSea(initial,false);if(hashPanel&&hash!==initial){requestAnimationFrame(()=>scrollToTarget(hash))};seaTabs.forEach(tab=>tab.addEventListener('click',event=>{event.preventDefault();selectSea(tab.dataset.seaTarget,true)}))}bookmarkNavs.forEach(nav=>{const toggle=nav.querySelector('.on-page-toggle');toggle.addEventListener('click',()=>{const open=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!open));nav.setAttribute('aria-expanded',String(!open))});nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();const target=link.getAttribute('href').slice(1);scrollToTarget(target);toggle.setAttribute('aria-expanded','false');nav.setAttribute('aria-expanded','false')}))});function populateYears(select,rows,attribute){if(!select)return;[...new Set(rows.map(row=>row.dataset[attribute]).filter(Boolean))].sort().reverse().forEach(year=>select.insertAdjacentHTML('beforeend',`<option value="${year}">${year}</option>`))}const archiveCards=[...document.querySelectorAll('.archive-card[data-archive-year]')];const archiveYear=document.getElementById('archiveYear');const archiveMonth=document.getElementById('archiveMonth');const archiveSearch=document.getElementById('archiveSearch');function filterArchive(){const year=archiveYear?.value||'all';const month=archiveMonth?.value||'all';const query=(archiveSearch?.value||'').toLowerCase();archiveCards.forEach(card=>{const show=(year==='all'||card.dataset.archiveYear===year)&&(month==='all'||card.dataset.archiveMonth===month)&&(!query||card.textContent.toLowerCase().includes(query));card.hidden=!show})}populateYears(archiveYear,archiveCards,'archiveYear');[archiveYear,archiveMonth,archiveSearch].filter(Boolean).forEach(control=>control.addEventListener('input',filterArchive));const trackerRows=[...document.querySelectorAll('.tracker-row')];const trackerBody=document.querySelector('.data-table tbody');const trackerYear=document.getElementById('trackerYear');const trackerMonth=document.getElementById('trackerMonth');const trackerSearch=document.getElementById('trackerSearch');const trackerSort=document.getElementById('trackerSort');const trackerDirection=document.getElementById('trackerSortDirection');function trackerMatches(row){const year=trackerYear?.value||'all';const month=trackerMonth?.value||'all';const query=(trackerSearch?.value||'').toLowerCase();return(year==='all'||row.dataset.sortYear===year)&&(month==='all'||row.dataset.sortMonth===month)&&(!query||row.textContent.toLowerCase().includes(query))}function sortTracker(){const field=trackerSort?.value||'date';const direction=trackerDirection?.value==='desc'?-1:1;trackerRows.sort((a,b)=>{const av=a.dataset['sort'+field.charAt(0).toUpperCase()+field.slice(1)]||'';const bv=b.dataset['sort'+field.charAt(0).toUpperCase()+field.slice(1)]||'';const an=Number(av),bn=Number(bv);let result=Number.isFinite(an)&&Number.isFinite(bn)?an-bn:av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});if(!av)result=1;if(!bv)result=-1;return result*direction});trackerRows.forEach(row=>trackerBody?.appendChild(row));trackerRows.forEach(row=>{row.hidden=!trackerMatches(row)})}populateYears(trackerYear,trackerRows,'sortYear');sortTracker();[trackerYear,trackerMonth,trackerSearch,trackerSort,trackerDirection].filter(Boolean).forEach(control=>control.addEventListener('input',sortTracker));const clear=document.getElementById('clearTrackerFilters');if(clear)clear.addEventListener('click',()=>{[trackerYear,trackerMonth,trackerSort,trackerDirection].forEach(control=>{if(control)control.value=control.id==='trackerSortDirection'?'asc':control.id==='trackerSort'?'date':'all'});if(trackerSearch)trackerSearch.value='';sortTracker()});const params=new URLSearchParams(location.search);const current=params.get('view')==='table'?'table':'cards';if(current==='table'){document.body.classList.add('table-mode')}document.querySelectorAll('.view-toggle a').forEach(link=>{const url=new URL(link.href,location.href);const mode=url.searchParams.get('view')==='table'?'table':'cards';if(mode===current){link.classList.add('active');link.setAttribute('aria-current','true')}else{link.classList.remove('active');link.setAttribute('aria-current','false')}})});""",
+    )
+    write_text(
+        ASSETS / "static-dashboard.js",
+        (ASSETS / "static-dashboard.js").read_text(encoding="utf-8")
+        + """document.addEventListener('DOMContentLoaded',()=>{const links=[...document.querySelectorAll('.on-page-links a')];const targets=links.map(link=>document.getElementById(link.getAttribute('href').slice(1))).filter(Boolean);if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){links.forEach(link=>link.classList.toggle('is-current',link.getAttribute('href')==='#'+entry.target.id))}})},{rootMargin:'-25% 0px -65% 0px',threshold:0});targets.forEach(target=>observer.observe(target))}});""",
     )
 
 
