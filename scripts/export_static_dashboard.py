@@ -25,6 +25,17 @@ METADATA = LOCAL_APP / "extraction_metadata.json"
 WEEKLY_SUMMARY = OUT / "weekly_candidate_capture_summary.json"
 MEETING_PACK_OUTPUT_ROOT = OUT / "meeting_pack"
 NEWS_CONTEXT_FILENAME = "news_context_review.csv"
+NEWS_EXCLUSION_PATTERNS = (
+    ("merchandise", re.compile(r"\bmerch(?:andise|andising)\b|\baction figures?\b|\bcollectibles?\b|\btoys?\b", re.I)),
+    ("guide", re.compile(r"\bhow[- ]to\b|\bguide\b|\bin order\b|/guide(?:[/?#]|$)", re.I)),
+    ("consumer deal", re.compile(r"\bdeal(?:s)?\b|\bbundle(?:s)?\b|\bdiscount(?:s)?\b|\bpre[- ]orders?\b", re.I)),
+    ("leak", re.compile(r"\bleaks?\b|\bleaked\b|\brumou?rs?\b|\bspoilers?\b", re.I)),
+)
+GAME_CONTEXT_MARKERS = re.compile(
+    r"\b(game|games|gaming|release|launch|steam|mobile|pc|playstation|xbox|nintendo|rpg|dlc|app)\b",
+    re.I,
+)
+NON_GAME_MEDIA_MARKERS = re.compile(r"\b(movie|film|television|tv|anime)\b", re.I)
 GAME_REPORT_FILENAME = "game_report_layer.csv"
 GAME_ENRICHED_FILENAME = "game_enriched_layer.csv"
 SEA_GAME_LAYER_FILENAME = "sea_game_layer.csv"
@@ -234,15 +245,6 @@ def game_title(row):
     return row.get("english_report_name") or row.get("unified_name") or row.get("pc_title") or row.get("report_name") or "Untitled"
 
 
-def game_layer_signal(row):
-    classification = row.get("report_classification", "")
-    sg_gross = safe_float(row.get("sg_revenue_gross"))
-    steam_peak = safe_float(row.get("steamdb_peak"))
-    if classification == "pc_only":
-        return "High Revenue Signal" if steam_peak >= 10000 else "Early Revenue Signal"
-    return "High Revenue Signal" if sg_gross >= 3000 else "Early Revenue Signal"
-
-
 def game_layer_platform(row, enriched=None):
     if enriched and enriched.get("platforms_confirmed"):
         return enriched.get("platforms_confirmed", "")
@@ -349,8 +351,6 @@ def game_layer_report_rows(meeting_date):
         is_pc_only = row.get("report_classification") == "pc_only"
         report_rows.append(
             {
-                "Signal Type": game_layer_signal(row),
-                "Signal Definition": "Game-layer final report row.",
                 "SG Gross Revenue": "" if is_pc_only else row.get("sg_revenue_gross") or "0",
                 "SG Downloads": "" if is_pc_only else row.get("sg_downloads") or "0",
                 "Inclusion Reason": game_layer_reason(row, enriched),
@@ -388,7 +388,7 @@ def game_layer_report_rows(meeting_date):
                 "Continuity Note": enriched.get("continuity_note") or row.get("continuity_note", ""),
                 "Continuity Brief Href": enriched.get("continuity_brief_href") or row.get("continuity_brief_href", ""),
                 "Continuity": continuity_table_text(enriched.get("continuity_note") or row.get("continuity_note", "")),
-                "registry_game_id": enriched.get("registry_game_id") or row.get("registry_game_id", ""),
+                "registry_game_id": "" if str(enriched.get("registry_game_id") or row.get("registry_game_id", "")).strip().lower() == "unconfirmed" else (enriched.get("registry_game_id") or row.get("registry_game_id", "")),
             }
         )
     return report_rows
@@ -451,20 +451,6 @@ def value_chips(value):
     if not parts:
         return '<span class="muted-value">N/A</span>'
     return '<div class="chip-list">' + "".join(f'<span class="metric-badge neutral">{escape(part)}</span>' for part in parts) + "</div>"
-
-
-def status_badge(label):
-    text = str(label or "N/A").strip()
-    lowered = text.lower()
-    if "strong" in lowered or "high revenue" in lowered:
-        text = "High Revenue Signal"
-        kind = "strong"
-    elif "emerging" in lowered or "early revenue" in lowered:
-        text = "Early Revenue Signal"
-        kind = "early"
-    else:
-        kind = "early"
-    return f'<span class="metric-badge {kind}">{escape(text)}</span>'
 
 
 def performance_block(row):
@@ -552,22 +538,44 @@ def source_news_context(rows, schedule):
     review_rows = read_csv(MEETING_PACK_OUTPUT_ROOT / meeting_date / NEWS_CONTEXT_FILENAME)
     output = []
     for row in review_rows:
+        exclusion_reason = news_exclusion_reason(row)
+        if exclusion_reason and not is_explicit_approved_game_announcement(row, exclusion_reason):
+            continue
         context_type = row.get("context_type")
         decision = str(row.get("editor_decision") or "").strip().lower()
         include_value = str(row.get("include_in_final_report") or "").strip().lower()
-        if context_type == "industry_trend":
-            if decision == "exclude" or include_value == "no":
-                continue
-        elif context_type == "high_score_game_announcement":
-            if decision == "exclude" or include_value == "no":
-                continue
-        elif include_value != "yes":
+        if decision in {"exclude", "watchlist"} or include_value != "yes":
             continue
         event_date = parse_date(row.get("event_date")) or parse_date(row.get("published_at"))
         if period_start and period_end and (not event_date or not period_start <= event_date <= period_end):
             continue
         output.append(row)
     return output
+
+
+def is_explicit_approved_game_announcement(row, exclusion_reason):
+    """Allow only a human-approved announcement to override a pre-order match."""
+    return (
+        exclusion_reason == "consumer deal"
+        and str(row.get("include_in_final_report") or "").strip().lower() == "yes"
+        and str(row.get("editor_decision") or "").strip().lower() == "include"
+        and str(row.get("final_report_section") or "").strip().lower() == "game announcements"
+        and str(row.get("context_type") or "").strip() == "high_score_game_announcement"
+    )
+
+
+def news_exclusion_reason(row):
+    """Return a stable editorial exclusion reason, or blank when eligible."""
+    text = " ".join(
+        str(row.get(field) or "")
+        for field in ("title", "title_en", "url", "story_key")
+    )
+    for reason, pattern in NEWS_EXCLUSION_PATTERNS:
+        if pattern.search(text):
+            return reason
+    if NON_GAME_MEDIA_MARKERS.search(text) and not GAME_CONTEXT_MARKERS.search(text):
+        return "non-game media"
+    return ""
 
 
 def source_sea_game_layer(rows, schedule):
@@ -717,12 +725,8 @@ def normalized_metadata(metadata, rows):
 
 
 def signal_group(row):
-    signal = (row.get("Signal Type") or row.get("Market Relevance") or "").lower()
+    signal = str(row.get("Market Relevance") or "").lower()
     return "strong" if "strong" in signal else "early"
-
-
-def signal_label(row):
-    return "High Revenue Signal" if signal_group(row) == "strong" else "Early Revenue Signal"
 
 
 def title_for(row):
@@ -836,13 +840,12 @@ def summary_cards(rows):
             f'<article class="summary-card {escape(kind)}"><small>{escape(label)}</small><h3>{escape(headline)}</h3><p>{escape(detail)}</p></article>'
             for kind, label, headline, detail in cards
         ) + "</section>"
-    strong = [r for r in rows if signal_group(r) == "strong"]
-    emerging = [r for r in rows if signal_group(r) != "strong"]
     leader = max(rows, key=lambda r: safe_float(r.get("SG Gross Revenue")), default={})
     mobile_rows = [row for row in rows if row.get("report_classification") != "pc_only"]
+    pc_rows = [row for row in rows if row.get("report_classification") == "pc_only"]
     total_revenue = sum(safe_float(r.get("SG Gross Revenue")) for r in mobile_rows)
     cards = [
-        ("snapshot", "Current snapshot", f"{len(rows)} included launches", f"{len(strong)} high / {len(emerging)} early"),
+        ("snapshot", "Current snapshot", f"{len(rows)} included launches", f"{len(mobile_rows)} mobile / {len(pc_rows)} PC"),
         ("opportunity", "Top opportunity", title_for(leader) if leader else "No title available", money(leader.get("SG Gross Revenue")) if leader else "N/A"),
         ("action", "Singapore ST Gross Revenue", money(total_revenue), "Singapore country view; PC-only games excluded"),
     ]
@@ -863,7 +866,7 @@ def sea_signal_label(row, summary):
     if revenue >= 3000:
         return "Country-led signal"
     if revenue >= 1000:
-        return "Early revenue signal"
+        return "Early download signal"
     return "Early download signal" if downloads else "Country-led signal"
 
 
@@ -1319,7 +1322,12 @@ def released_games_section(strong, emerging, view):
 def news_context_card(row, label):
     title = row.get("title_en") or row.get("title") or "Untitled news item"
     source = row.get("source") or "Unknown source"
-    score = row.get("hot_score") or "0"
+    score_text = str(row.get("hot_score") or "").strip()
+    try:
+        has_positive_score = float(score_text) > 0
+    except (TypeError, ValueError):
+        has_positive_score = False
+    score_badge = f'<span class="metric-badge strong">Score {escape(score_text)}</span>' if has_positive_score else ""
     event_date = display_date(row.get("event_date")) or display_date(row.get("published_at")) or "Date unavailable"
     matched = row.get("matched_report_game")
     reason = row.get("editor_note") or row.get("inclusion_reason") or "Qualified through Game News Radar context rules."
@@ -1333,7 +1341,7 @@ def news_context_card(row, label):
     link_html = f'<a href="{escape(url)}" target="_blank" rel="noopener">View source</a>' if url != "#" else ""
     parts = [
         '<article class="news-context-card">',
-        f'  <div class="meta-chip-row"><span class="metric-badge neutral">{escape(label)}</span><span class="metric-badge strong">Score {escape(str(score))}</span><span class="metric-badge neutral">{escape(event_date)}</span></div>',
+        f'  <div class="meta-chip-row"><span class="metric-badge neutral">{escape(label)}</span>{score_badge}<span class="metric-badge neutral">{escape(event_date)}</span></div>',
         f"  <h3>{escape(title)}</h3>",
         f"  <p><b>Source:</b> {escape(source)}</p>",
     ]
@@ -1355,9 +1363,9 @@ def news_context_section(news_context, heading="Game News Context", regional=Fal
         "No release-support news matched selected games",
         "Game Release radar items only appear here when they match a Sensor Tower or SteamDB selected game.",
     )
-    announcement_cards = "".join(news_context_card(row, "High-score announcement") for row in announcement_rows) or empty_state(
-        "No high-score announcements for this report period",
-        "Game Announcements only appear here when the radar score is high and the event date is inside the report period.",
+    announcement_cards = "".join(news_context_card(row, "Game Announcement") for row in announcement_rows) or empty_state(
+        "No Game Announcements for this report period",
+        "Game Announcements appear here after editorial review and approval for the report period.",
     )
     scope = "SEA6-wide or multi-country signals affecting the regional gaming landscape." if regional else "News signals relevant to this country view."
     return f"""<section class="news-context-section country-news-context">

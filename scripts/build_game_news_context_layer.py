@@ -1,6 +1,7 @@
 import argparse
 import csv
 import json
+import re
 import sys
 import urllib.request
 from datetime import date, datetime
@@ -22,6 +23,12 @@ PUBLIC_GAME_RADAR_URL = (
 DEFAULT_ANNOUNCEMENT_MIN_SCORE = 70
 DEFAULT_INDUSTRY_MIN_SCORE = 70
 DEFAULT_INDUSTRY_MAX_ROWS = 3
+
+ANNOUNCEMENT_REVIEW_MARKERS = re.compile(
+    r"\b(pre[- ]?registration|technical test|beta test|launch(?:es|ed|ing)?|"
+    r"release date|confirmed release|delayed?|postponed?|coming to|opens? in)\b",
+    re.I,
+)
 
 SECTION_GAME_RELEASES = "game_releases"
 SECTION_GAME_ANNOUNCEMENTS = "game_announcements"
@@ -209,6 +216,14 @@ def hot_score(item):
         return 0
 
 
+def qualifying_announcement_candidate(item):
+    """Identify announcement topics worth manual review without auto-including them."""
+    if item.get("radar_section") != SECTION_GAME_ANNOUNCEMENTS:
+        return False
+    text = " ".join(str(item.get(field) or "") for field in ("title", "title_en", "url"))
+    return bool(ANNOUNCEMENT_REVIEW_MARKERS.search(text))
+
+
 def story_key(item):
     text = normalize_title(item_text(item))
     if not text:
@@ -362,7 +377,14 @@ def build_rows(
                 seen_urls.add(url)
             continue
 
-        if section == SECTION_GAME_ANNOUNCEMENTS and score >= announcement_min_score:
+        if section == SECTION_GAME_ANNOUNCEMENTS and (
+            score >= announcement_min_score or qualifying_announcement_candidate(item)
+        ):
+            priority_note = (
+                f"hot_score >= {announcement_min_score}"
+                if score >= announcement_min_score
+                else "qualifying regional launch or release announcement marker"
+            )
             rows.append(
                 context_row(
                     item,
@@ -373,7 +395,7 @@ def build_rows(
                     "high_score_game_announcement",
                     "",
                     "",
-                    f"Game Announcement hot_score >= {announcement_min_score} and inside report period.",
+                    f"Game Announcement review candidate: {priority_note}; inside report period. Human approval required.",
                 )
             )
             if url:

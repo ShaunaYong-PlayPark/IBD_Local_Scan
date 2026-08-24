@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Latest Brief | IBD Market Intelligence</title>
-  <link rel="stylesheet" href="assets/static-dashboard.css">
-  <script defer src="assets/static-dashboard.js"></script>
+  <title>Historical Brief | IBD Market Intelligence</title>
+  <link rel="stylesheet" href="../../assets/static-dashboard.css">
+  <script defer src="../../assets/static-dashboard.js"></script>
 </head>
-<body class="dashboard-page page-latest">
+<body class="dashboard-page page-historical">
   <div class="app-shell top-nav-shell">
     <header class="site-header">
       <div class="brand top-brand">
@@ -15,23 +15,24 @@
         <p>SEA6 &middot; Mobile Launch Discovery</p>
         <span>Report Dashboard</span>
       </div>
-      <nav class="top-nav" aria-label="Primary navigation"><a class="on" href="latest-brief.html" data-tooltip="Read the current executive market update." aria-current="page">Latest Brief</a><a class="" href="historical-briefs.html" data-tooltip="Open past briefs and review meeting schedule." aria-current="false">Brief Archive</a><a class="" href="game-tracker.html" data-tooltip="Filter games mentioned across briefs." aria-current="false">Game Tracker</a></nav>
+      <nav class="top-nav" aria-label="Primary navigation"><a class="" href="../../latest-brief.html" data-tooltip="Read the current executive market update." aria-current="false">Latest Brief</a><a class="on" href="../../historical-briefs.html" data-tooltip="Open past briefs and review meeting schedule." aria-current="page">Brief Archive</a><a class="" href="../../game-tracker.html" data-tooltip="Filter games mentioned across briefs." aria-current="false">Game Tracker</a></nav>
     </header>
     <div class="workspace">
       <div class="fixed-secondary-row">
       <div class="fixed-secondary-inner">
       <header class="topbar compact-topbar slim-context-bar" aria-label="Brief context">
         <div class="inline-context">
-          <b title="Latest Brief | Period: 04 Aug 2026 to 17 Aug 2026 | Meeting: 18 Aug 2026 | Data as of: 17 Aug 2026">Latest Brief</b>
-          <span title="Period: 04 Aug 2026 to 17 Aug 2026">04 Aug-17 Aug 2026</span>
-          <span title="Meeting: 18 Aug 2026">Meeting 18 Aug 2026</span>
-          <span title="Data as of: 17 Aug 2026">Data 17 Aug 2026</span>
+          <b title="Historical Brief | Period: 04 Aug 2026 to 17 Aug 2026 | Meeting: 18 Aug 2026 | Data as of: 17 Aug 2026">Historical Brief</b>
+          <span>Historical period: 04 Aug 2026 to 17 Aug 2026</span>
+          <span>Meeting 18 Aug 2026</span>
+          <span>Data 17 Aug 2026</span>
+          <span>Latest 18 Aug 2026</span>
         </div>
       </header>
       <nav class="sea-country-tabs" aria-label="SEA6 country views"><a class="sea-tab active" href="#sea6-summary" data-sea-target="sea6-summary-panel" aria-selected="true">SEA6 Summary</a><a class="sea-tab" href="#sea-sg" data-sea-target="sea-sg" aria-selected="false">Singapore</a><a class="sea-tab" href="#sea-my" data-sea-target="sea-my" aria-selected="false">Malaysia</a><a class="sea-tab" href="#sea-ph" data-sea-target="sea-ph" aria-selected="false">Philippines</a><a class="sea-tab" href="#sea-id" data-sea-target="sea-id" aria-selected="false">Indonesia</a><a class="sea-tab" href="#sea-th" data-sea-target="sea-th" aria-selected="false">Thailand</a><a class="sea-tab" href="#sea-vn" data-sea-target="sea-vn" aria-selected="false">Vietnam</a></nav></div>
       </div>
       <main id="main-content"><section class="page-header">
-  <div><em>Market Brief</em><h1 id="market-title">SEA6 Gaming Market</h1><p id="market-subtitle">Regional view of the latest SEA6 market scan.</p></div>
+  <div><em>Historical Brief</em><h1 id="market-title">SEA6 Gaming Market</h1><p id="market-subtitle">Historical SEA6 regional view for 04 Aug 2026 to 17 Aug 2026.</p></div>
 </section><section class="brief-section sea-regional-section">
   <div class="sea-view-panel sea-summary-panel active" id="sea6-summary-panel">
   <div class="section-heading"><div><h2 id="sea6-summary">SEA6 Summary</h2><p>Regional view of included new mobile games across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div></div>
@@ -916,7 +917,7 @@
       const updateMarketHeading = (target) => {
         const name = marketNames[target] || 'SEA6';
         if (marketTitle) marketTitle.textContent = `${name} Gaming Market`;
-        if (marketSubtitle) marketSubtitle.textContent = name === 'SEA6' ? 'Regional view of the latest SEA6 market scan.' : 'Country view of included mobile games, game announcements, and industry signals.';
+        if (marketSubtitle) marketSubtitle.textContent = name === 'SEA6' ? 'Historical SEA6 regional view for 04 Aug 2026 to 17 Aug 2026.' : 'Country view of included mobile games, game announcements, and industry signals.';
       };
       const syncNonTabContent = (target) => {
         const hash = location.hash.replace('#', '');

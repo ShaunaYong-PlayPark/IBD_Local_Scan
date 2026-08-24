@@ -56,6 +56,7 @@ NEWS_FIELDS = [
     "event_date",
     "hot_score",
     "source",
+    "region",
     "title",
     "title_en",
     "url",
@@ -82,7 +83,7 @@ SEA_FIELDS = [
 def write_csv(path, rows, fields):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -313,6 +314,23 @@ def main():
                         "editor_decision": "include",
                         "editor_note": "Should be filtered by event date.",
                     },
+                    {
+                        "meeting_date": "2026-08-04",
+                        "report_start_date": "2026-07-21",
+                        "report_end_date": "2026-08-03",
+                        "context_type": "high_score_game_announcement",
+                        "event_date": "2026-07-30",
+                        "hot_score": "",
+                        "source": "Regional Games Source",
+                        "region": "SEA6",
+                        "title": "Regional launch announcement with technical test",
+                        "title_en": "Regional launch announcement with technical test",
+                        "url": "https://example.com/regional-launch",
+                        "include_in_final_report": "yes",
+                        "final_report_section": "Game Announcements",
+                        "editor_decision": "include",
+                        "editor_note": "Approved regional announcement.",
+                    },
                 ],
                 NEWS_FIELDS,
             )
@@ -388,6 +406,12 @@ def main():
             latest_html = (docs / "latest-brief.html").read_text(encoding="utf-8")
             payload = json.loads((docs / "data" / "final-report.json").read_text(encoding="utf-8"))
             exported_rows = list(csv.DictReader((docs / "data" / "final_sg_market_scan_current_workflow.csv").open(encoding="utf-8-sig")))
+
+            for exported_row in payload["rows"] + exported_rows:
+                assert_true("Signal Type" not in exported_row, "Signal Type must not be exported")
+                assert_true("Signal Definition" not in exported_row, "Signal Definition must not be exported")
+                assert_true("signal_definition" not in exported_row, "signal_definition must not be exported")
+                assert_true(str(exported_row.get("registry_game_id", "")).strip().lower() != "unconfirmed", "unconfirmed registry IDs must not be exported")
 
             assert_true("Meeting: 04 Aug 2026" in latest_html, "meeting date should come from game layer")
             assert_true("SEA6 Summary" in latest_html, "SEA6 summary should render")
@@ -470,6 +494,14 @@ def main():
             assert_true("Peak 16,791" in steam_context and "Reviews 1,000" in steam_context, "mobile+PC Steam stats should render")
             assert_true("Malaysia Game News Context" in latest_html, "country news sections should render")
             assert_true("Reviewed announcement note." in latest_html, "reviewed news note should render")
+            assert_true("Approved regional announcement." in latest_html, "approved blank-score regional announcement should render")
+            assert_true("Game Announcement" in latest_html and "High-score announcement" not in latest_html, "announcement cards should use the neutral Game Announcement label")
+            assert_true("Score 0" not in latest_html, "blank-score announcements should not show a score badge")
+            for country_code in ("sg", "my", "ph", "id", "th", "vn"):
+                panel_start = latest_html.index(f'id="sea-{country_code}"')
+                panel_end = latest_html.find('<section class="sea-view-panel', panel_start + 1)
+                country_panel = latest_html[panel_start:panel_end if panel_end >= 0 else None]
+                assert_true("Regional launch announcement with technical test" in country_panel, f"regional announcement should render in {country_code.upper()}")
             assert_true("Out-of-period announcement" not in latest_html, "out-of-period news should not render")
             assert_true("SG Performance" not in latest_html, "SG performance blocks should not be used in SEA6 country views")
             pc_payload = next(row for row in payload["rows"] if row["Game Title"] == "Pass the Fear")
@@ -480,7 +512,7 @@ def main():
                 assert_true(pc_row["Top 3 Markets"] == "", "PC-only rows should not export SEA markets")
                 assert_true(pc_row["SG App Store Ranks"] == "", "PC-only rows should not export app store ranks")
             assert_true(len(payload["rows"]) == 4, "final JSON should use qualifying game layer rows")
-            assert_true(len(payload["news_context"]) == 1, "final JSON should use reviewed news rows")
+            assert_true(len(payload["news_context"]) == 2, "final JSON should use reviewed news rows")
             assert_true(payload["sea_summary"]["ranking_data_as_of"] == "2026-08-03", "SEA summary ranking date should be exported")
             assert_true(payload["sea_games"][0]["game_title"] == "SEA Shared RPG", "SEA games should be exported")
             assert_true(len(exported_rows) == 4, "final CSV export should match qualifying game layer rows")

@@ -90,14 +90,16 @@ def rewrite_proof_html(path, meeting_date, latest_date):
 def copy_outputs(meeting_date):
     destination = PROOF_ROOT / meeting_date
     destination.mkdir(parents=True, exist_ok=True)
+    (destination / "data").mkdir(parents=True, exist_ok=True)
     latest_date = latest_meeting_date(meeting_date)
-    copies = {
-        DOCS / "data" / "final-report.json": destination / "final-report.json",
-        DOCS / "data" / "final_sg_market_scan_current_workflow.csv": destination / "final_sg_market_scan_current_workflow.csv",
-        DOCS / "latest-brief.html": destination / "latest-brief.html",
-        DOCS / "index.html": destination / "index.html",
-    }
-    for source, target in copies.items():
+    copies = [
+        (DOCS / "data" / "final-report.json", destination / "final-report.json"),
+        (DOCS / "data" / "final-report.json", destination / "data" / "final-report.json"),
+        (DOCS / "data" / "final_sg_market_scan_current_workflow.csv", destination / "final_sg_market_scan_current_workflow.csv"),
+        (DOCS / "latest-brief.html", destination / "latest-brief.html"),
+        (DOCS / "index.html", destination / "index.html"),
+    ]
+    for source, target in copies:
         if not source.exists():
             raise RuntimeError(f"Expected export output missing: {source}")
         shutil.copy2(source, target)
