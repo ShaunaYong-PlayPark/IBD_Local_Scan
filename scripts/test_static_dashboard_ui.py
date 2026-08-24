@@ -62,7 +62,8 @@ def main():
         "meeting_date": "2026-08-18",
     }])
     assert_true(tracker_html.index("Related Brief") < tracker_html.index("Game Title"), "tracker brief action should be first")
-    assert_true("brief-icon-link" in tracker_html and "aria-label=\"Open brief for 04 Aug 2026 to 17 Aug 2026\"" in tracker_html, "tracker brief action should be an accessible icon")
+    assert_true("brief-icon-link" in tracker_html and "folder-icon" in tracker_html and "aria-label=\"Open brief for 04 Aug 2026 to 17 Aug 2026\"" in tracker_html, "tracker brief action should be an accessible folder icon")
+    assert_true("▣" not in tracker_html and "Developer" not in tracker_html, "tracker should not show the old symbol or developer")
     assert_true("data-sort-date" in tracker_html and "data-sort-revenue" in tracker_html, "tracker rows should expose sortable values")
 
     original_assets = exporter.ASSETS
@@ -75,7 +76,22 @@ def main():
         assert_true("trackerSort" in js and "trackerSortDirection" in js and "sortTracker" in js, "tracker sorting should have browser behavior")
         assert_true("IntersectionObserver" in js and "is-current" in js, "section selector should track the current section")
         assert_true("@media(max-width:768px)" in css and "on-page-nav" in css, "mobile navigation styling should be present")
+        assert_true(".on-page-nav{position:fixed!important" in css and "z-index:55!important" in css, "desktop section selector should remain fixed and clickable")
     exporter.ASSETS = original_assets
+
+    news_html = exporter.news_context_card({
+        "title_en": "Regional announcement", "source": "Example", "published_at": "2026-08-12",
+        "affected_countries": "SG, MY, PH, ID, TH, VN", "url": "https://example.com",
+        "context_type": "industry_trend", "key_details": "A factual event.", "why_it_matters": "Relevant regional context.",
+    }, "Industry trend")
+    assert_true(all(f'class="country-code-tag">{code}<' in news_html for code in ("SG", "MY", "PH", "ID", "TH", "VN")), "affected markets should render SEA6 country-code tags")
+
+    generated = [Path("docs/latest-brief.html")] + [Path(f"docs/proof-runs/{date}/latest-brief.html") for date in ("2026-07-07", "2026-07-21", "2026-08-04", "2026-08-18")]
+    for path in generated:
+        html = path.read_text(encoding="utf-8")
+        assert_true("Developer" not in html, f"developer should be absent from executive UI: {path}")
+        assert_true("First recorded mobile release" in html or "Mobile release in" in html, f"release label should render: {path}")
+        assert_true("<span class=\"genre-tag\">Games<" not in html and "<span class=\"genre-tag\">Game<" not in html, f"generic genre tag should not render: {path}")
     print("STATIC_DASHBOARD_UI_PASS")
 
 

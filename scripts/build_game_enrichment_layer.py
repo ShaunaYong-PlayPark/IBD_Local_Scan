@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MEETING_PACK_OUTPUT_ROOT = ROOT / "data" / "output" / "meeting_pack"
 MEETING_DROP_ROOT = ROOT / "data" / "input" / "meeting_drop"
 MASTER_TITLE_MAPPING_PATH = ROOT / "data" / "reference" / "master_title_mapping.csv"
+GENRE_REFERENCE_PATH = ROOT / "data" / "reference" / "game_genre_sources.csv"
 
 UNKNOWN = "unconfirmed"
 
@@ -116,6 +117,17 @@ def title_aliases_from_master_mapping(path=MASTER_TITLE_MAPPING_PATH):
     return aliases
 
 
+def genre_references(path=GENRE_REFERENCE_PATH):
+    path = Path(path)
+    if not path.exists():
+        return {}
+    return {
+        pc.normalize_title(row.get("report_name")): row
+        for row in read_csv(path)
+        if pc.normalize_title(row.get("report_name"))
+    }
+
+
 def normalize_date(value):
     parsed = pc.parse_date(value)
     return parsed.isoformat() if parsed else str(value or "").strip()
@@ -166,6 +178,7 @@ def platforms(row):
 
 def base_enrichment_row(row):
     name = report_name(row)
+    genre_reference = genre_references().get(pc.normalize_title(name), {})
     classification = row.get("report_classification", UNKNOWN) or UNKNOWN
     release_date, release_scope, release_source_url = release_fields(row)
     store_url = row.get("steam_url") if row.get("steam_url") else UNKNOWN
@@ -182,7 +195,7 @@ def base_enrichment_row(row):
         "store_url": store_url,
         "developer": UNKNOWN,
         "publisher": row.get("unified_publisher_name") or UNKNOWN,
-        "genre": UNKNOWN,
+        "genre": genre_reference.get("genre") or UNKNOWN,
         "platforms_confirmed": platforms(row),
         "mobile_pc_relationship": relationship(classification),
         "registry_game_id": row.get("registry_game_id") or UNKNOWN,
@@ -191,7 +204,7 @@ def base_enrichment_row(row):
         "continuity_first_seen_meeting_date": row.get("continuity_first_seen_meeting_date") or "",
         "summary_sentence_1": UNKNOWN,
         "summary_sentence_2": UNKNOWN,
-        "source_urls": source_urls,
+        "source_urls": genre_reference.get("genre_source_url") or source_urls,
         "enrichment_status": "needs_research",
         "enrichment_notes": "Base row generated from game_report_layer.csv; unknown internet research fields left unconfirmed.",
     }
@@ -224,6 +237,16 @@ def apply_overlay(row, overlay):
         value = str(values.get(field, "")).strip()
         if field != "report_name" and value:
             updated[field] = value
+    reference = genre_references().get(pc.normalize_title(row.get("report_name")), {})
+    if reference.get("genre"):
+        updated["genre"] = reference["genre"]
+    if reference.get("genre_source_url"):
+        existing_sources = str(updated.get("source_urls") or "").strip()
+        source_url = reference["genre_source_url"].strip()
+        if not existing_sources:
+            updated["source_urls"] = source_url
+        elif source_url not in existing_sources:
+            updated["source_urls"] = f"{source_url} | {existing_sources}"
     if updated["enrichment_status"] == "needs_research":
         updated["enrichment_status"] = "research_overlay_applied"
     return updated

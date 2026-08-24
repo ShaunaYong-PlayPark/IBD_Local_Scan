@@ -21,6 +21,7 @@ LATEST_FINALIZED_CSV = FINALIZED / "latest_finalized_brief.csv"
 DOCS_FINAL_CSV = DATA / "final_sg_market_scan_current_workflow.csv"
 DOCS_FINAL_JSON = DATA / "final-report.json"
 DOCS_WEEKLY_STAGING_JSON = DATA / "weekly-staging-summary.json"
+GENRE_REFERENCE_PATH = ROOT / "data" / "reference" / "game_genre_sources.csv"
 METADATA = LOCAL_APP / "extraction_metadata.json"
 WEEKLY_SUMMARY = OUT / "weekly_candidate_capture_summary.json"
 MEETING_PACK_OUTPUT_ROOT = OUT / "meeting_pack"
@@ -297,8 +298,7 @@ def game_key_details(row, enriched=None):
         )
         if summary:
             return summary
-    genre = row.get("genre") or row.get("Genre") or "game"
-    return f"{title} is a {genre} selected for the report. Gameplay and USP details still need manual enrichment."
+    return f"{title} is selected for the report. Gameplay and USP details still need manual enrichment."
 
 
 def top_markets_text(row):
@@ -749,6 +749,41 @@ def title_for(row):
     return row.get("Game Title") or row.get("English Display Title") or row.get("Original Title") or "Untitled"
 
 
+GENRE_INVALID_VALUES = {"", "game", "games", "n/a", "na", "unconfirmed", "genre unavailable"}
+
+
+def genre_reference_rows(path=None):
+    return {
+        normalized_key(row.get("report_name")): row
+        for row in read_csv(Path(path or GENRE_REFERENCE_PATH))
+        if normalized_key(row.get("report_name"))
+    }
+
+
+def genre_validation_failures(rows, reference_path=None):
+    references = genre_reference_rows(reference_path)
+    failures = []
+    for row in rows:
+        title = title_for(row)
+        genre = str(row.get("Genre") or row.get("genre") or "").strip()
+        source_url = str(references.get(normalized_key(title), {}).get("genre_source_url") or "").strip()
+        problems = []
+        if genre.lower() in GENRE_INVALID_VALUES:
+            problems.append("missing or generic genre")
+        if not source_url:
+            problems.append("missing genre_source_url")
+        if problems:
+            failures.append(f"{title}: {', '.join(problems)}")
+    return failures
+
+
+def require_valid_game_genres(rows, reference_path=None):
+    failures = genre_validation_failures(rows, reference_path)
+    if failures:
+        raise ValueError("Genre validation failed; report generation stopped:\n- " + "\n- ".join(failures))
+    return True
+
+
 def sort_rows(rows):
     return sorted(rows, key=lambda row: (-safe_float(row.get("SG Gross Revenue")), title_for(row).lower()))
 
@@ -763,7 +798,6 @@ def safe_float(value):
 def page_shell(title, active, body, rows, schedule, metadata):
     start, end = report_period(rows, schedule)
     meeting = meeting_date_for(rows, schedule)
-    active_name = next((label for _, label, _, key in NAV_ITEMS if key == active), "Latest Brief")
     nav = "".join(
         f'<a class="{"on" if key == active else ""}" href="{href}" data-tooltip="{escape(desc)}" '
         f'aria-current="{"page" if key == active else "false"}">{escape(label)}</a>'
@@ -774,7 +808,7 @@ def page_shell(title, active, body, rows, schedule, metadata):
     compact_end = compact_date(end, include_year=True)
     compact_meeting = compact_date(meeting, include_year=True)
     compact_data_as_of = compact_date(data_as_of(metadata, rows), include_year=True)
-    full_context = f"{active_name} | Period: {display_date(start)} to {display_date(end)} | Meeting: {display_date(meeting)} | Data as of: {display_date(data_as_of(metadata, rows))}"
+    full_context = f"Latest Brief | Period: {display_date(start)} to {display_date(end)} | Meeting: {display_date(meeting)} | Data as of: {display_date(data_as_of(metadata, rows))}"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -790,7 +824,6 @@ def page_shell(title, active, body, rows, schedule, metadata):
       <div class="brand top-brand">
         <h1>IBD Market Intelligence</h1>
         <p>SEA6 &middot; Mobile Launch Discovery</p>
-        <span>Report Dashboard</span>
       </div>
       <nav class="top-nav" aria-label="Primary navigation">{nav}</nav>
     </header>
@@ -799,10 +832,10 @@ def page_shell(title, active, body, rows, schedule, metadata):
       <div class="fixed-secondary-inner">
       <header class="topbar compact-topbar slim-context-bar" aria-label="Brief context">
         <div class="inline-context">
-          <b title="{escape(full_context)}">{escape(active_name)}</b>
-          <span title="Period: {escape(display_date(start))} to {escape(display_date(end))}">{escape(compact_start or "N/A")}-{escape(compact_end or "N/A")}</span>
-          <span title="Meeting: {escape(display_date(meeting))}">Meeting {escape(compact_meeting or "N/A")}</span>
-          <span title="Data as of: {escape(display_date(data_as_of(metadata, rows)))}">Data {escape(compact_data_as_of or "N/A")}</span>
+          <b title="{escape(full_context)}">Latest Brief</b>
+          <span title="Period: {escape(display_date(start))} to {escape(display_date(end))}">Period: {escape(compact_start or "N/A")} to {escape(compact_end or "N/A")}</span>
+          <span title="Meeting: {escape(display_date(meeting))}">Meeting: {escape(compact_meeting or "N/A")}</span>
+          <span title="Data as of: {escape(display_date(data_as_of(metadata, rows)))}">Data as of: {escape(compact_data_as_of or "N/A")}</span>
         </div>
       </header>
       {sea_tabs}</div>
@@ -905,8 +938,9 @@ def sea_game_detail(row, report_rows):
     key = normalized_key(row.get("game_title") or row.get("original_title"))
     match = next((item for item in report_rows if normalized_key(title_for(item)) == key), {})
     publisher = row.get("publisher") or match.get("Publisher") or "Publisher unavailable"
-    developer = row.get("developer") or match.get("Developer") or ""
-    genre = row.get("genre") or match.get("Genre") or "Mobile game"
+    generic_genres = {"game", "games", "unknown", "unconfirmed", "n/a", "na"}
+    genre_candidates = (match.get("Genre"), row.get("genre"))
+    genre = next((str(value).strip() for value in genre_candidates if str(value or "").strip().lower() not in generic_genres), "")
     platforms = row.get("platforms") or match.get("Platform") or "iOS, Android"
     summary = match.get("Key Details") or (
         f'{row.get("game_title") or row.get("original_title") or "This game"} is a {genre.lower()} tracked through Sensor Tower SEA6 evidence. '
@@ -917,7 +951,7 @@ def sea_game_detail(row, report_rows):
         summary = sentences[0] + " Its SEA6 performance is shown below."
     else:
         summary = " ".join(sentences[:2])
-    return publisher, developer, genre, platforms, summary
+    return publisher, genre, platforms, summary
 
 
 def top_sea_revenue_markets(row, limit=None):
@@ -988,17 +1022,16 @@ def steam_context_html(report_row, label="PC equivalent / Steam context"):
 
 def sea_regional_mobile_card(row, report_rows):
     report_row = matching_report_row(row, report_rows)
-    publisher, developer, genre, platforms, summary = sea_game_detail(row, report_rows)
+    publisher, genre, platforms, summary = sea_game_detail(row, report_rows)
     title = row.get("game_title") or row.get("original_title") or "Untitled"
     original = row.get("original_title") or ""
     original_html = f'<p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
     classification = "Mobile + PC" if report_row.get("report_classification") == "mobile_led_cross_platform" else "Mobile-only"
-    developer_html = f'<p class="sea-company-meta"><b>Developer</b><span>{escape(developer)}</span></p>' if developer else ""
     genre_html = f'<span class="genre-tag">{escape(genre)}</span>' if genre else ""
     return f'''<article class="sea-country-card">
   <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(classification)}</span></div>
 {original_html}
-  <div class="sea-company-stack"><p class="sea-company-meta"><b>Publisher</b><span>{escape(publisher)}</span></p>{developer_html}</div>
+  <div class="sea-company-stack"><p class="sea-company-meta"><b>Publisher</b><span>{escape(publisher)}</span></p></div>
   <div class="meta-chip-row">{genre_html}</div>
   <div class="sea-country-stats"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(row.get("sea_st_gross_revenue")))}</b></span><span><small>SEA6 ST Downloads</small><b>{escape(number(row.get("sea_st_downloads")))}</b></span></div>
   <p class="sea-game-summary">{escape(summary)}</p>
@@ -1103,12 +1136,11 @@ def sea_country_release_groups(country_rows, country, report_rows):
 
 def sea_country_card(row, country, report_rows):
     prefix = country.lower()
-    publisher, developer, genre, platforms, summary = sea_game_detail(row, report_rows)
+    publisher, genre, platforms, summary = sea_game_detail(row, report_rows)
     report_row = matching_report_row(row, report_rows)
     original = row.get("original_title") or ""
     title = row.get("game_title") or original or "Untitled"
     original_html = f'<p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
-    developer_html = f'<p class="sea-company-meta"><b>Developer</b><span>{escape(developer)}</span></p>' if developer else ""
     note = sea_country_note(row, country)
     classification_label = "Mobile + PC" if report_row.get("report_classification") == "mobile_led_cross_platform" else "Mobile game"
     genre_html = f'<span class="genre-tag">{escape(genre)}</span>' if genre else ""
@@ -1120,7 +1152,7 @@ def sea_country_card(row, country, report_rows):
     return f'''<article class="sea-country-card">
   <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(classification_label)}</span></div>
 {original_html}
-  <div class="sea-company-stack"><p class="sea-company-meta"><b>Publisher</b><span>{escape(publisher)}</span></p>{developer_html}</div>
+  <div class="sea-company-stack"><p class="sea-company-meta"><b>Publisher</b><span>{escape(publisher)}</span></p></div>
   <div class="meta-chip-row">{genre_html}</div>
   <div class="sea-country-stats"><span><small>ST Gross Revenue</small><b>{escape(money(row.get(f"{prefix}_revenue_gross")))}</b></span><span><small>ST Downloads</small><b>{escape(number(row.get(f"{prefix}_downloads")))}</b></span></div>
   {f'<p class="country-release-date"><b>{escape(release_label)}</b> {escape(display_date(release_date) or release_date)}</p>' if release_date else ''}
@@ -1281,8 +1313,8 @@ def pc_context_block(row):
         stats.append('<div class="stat-cell"><span>Steam stats</span><b>Unavailable</b></div>')
     steam_url = row.get("steam_url")
     link = f'<a href="{escape(steam_url)}" target="_blank" rel="noopener">Steam store page</a>' if steam_url else ""
-    owners = " / ".join(value for value in (row.get("Publisher"), row.get("Developer")) if value)
-    owner_html = f'<p><b>Publisher / developer:</b> {escape(owners)}</p>' if owners else ""
+    owner = row.get("Publisher") or ""
+    owner_html = f'<p><b>Publisher:</b> {escape(owner)}</p>' if owner else ""
     return '<span class="market-chip structured-market-chip"><h5>PC Context</h5><div class="stat-grid pc-performance">' + "".join(stats) + f'</div>{owner_html}{link}</span>'
 
 
@@ -1302,10 +1334,10 @@ def signal_card(row, group):
     return f"""<article class="signal-card {card_class}">
   <div class="card-overview">
     <h3>{escape(title)}</h3>
-    <div class="company-stack"><p class="publisher-line"><small>Publisher</small><span>{escape(row.get("Publisher") or "Publisher unavailable")}</span></p>{f'<p class="publisher-line"><small>Developer</small><span>{escape(row.get("Developer"))}</span></p>' if row.get("Developer") else ''}</div>
+    <div class="company-stack"><p class="publisher-line"><small>Publisher</small><span>{escape(row.get("Publisher") or "Publisher unavailable")}</span></p></div>
     <div class="meta-chip-row">
       {value_chips(row.get("Platform") or "Platform unavailable")}
-      {value_chips(row.get("Genre") or "Genre unavailable")}
+      {value_chips(row.get("Genre") or "")}
       <span class="metric-badge neutral">{escape(report_classification_label(row))}</span>
       <span class="metric-badge neutral">Release {escape(display_date(row.get("Release Date")) or row.get("Release Date") or "N/A")}</span>
     </div>{title_note}
@@ -1330,7 +1362,6 @@ def report_table(rows, released=False):
     fields = [
         "Game Title",
         "Publisher",
-        "Developer",
         "Platform",
         "Release Date",
         "Genre",
@@ -1359,7 +1390,6 @@ def tracker_table(rows):
         "Related Brief",
         "Game Title",
         "Publisher",
-        "Developer",
         "Platform",
         "Release Date",
         "Genre",
@@ -1371,7 +1401,6 @@ def tracker_table(rows):
         "Steam Reviews",
         "Steam URL",
         "Continuity",
-        "Related Brief",
     ]
     head = "".join(f"<th>{escape(field)}</th>" for field in fields)
     body = "".join(
@@ -1391,7 +1420,6 @@ def tracker_sort_attributes(row):
         "title": title_for(row),
         "platform": row.get("Platform") or "",
         "publisher": row.get("Publisher") or "",
-        "developer": row.get("Developer") or "",
         "year": str(row.get("meeting_date") or row.get("report_end_date") or "")[:4],
         "month": str(row.get("meeting_date") or row.get("report_end_date") or "")[5:7],
     }
@@ -1411,7 +1439,7 @@ def table_cell(row, field):
         return f'<td class="num">{escape(money(value))}</td>'
     if field in ("SG Downloads", "ST Downloads"):
         return f'<td class="num">{escape(number(value))}</td>'
-    if field in ("Publisher", "Developer"):
+    if field == "Publisher":
         return f'<td><span class="company-meta">{escape(str(value or ""))}</span></td>'
     if field in ("Platform", "Genre"):
         return f"<td>{value_chips(value)}</td>"
@@ -1434,7 +1462,7 @@ def table_cell(row, field):
         text = value or row.get("_brief_label", "")
         if href:
             period = row.get("_brief_period") or text
-            return f'<td class="tracker-brief-cell"><a class="brief-icon-link" href="{escape(href)}" title="Open brief: {escape(period)}" aria-label="Open brief for {escape(period)}"><span aria-hidden="true">▣</span></a><span class="brief-period">{escape(period)}</span></td>'
+            return f'<td class="tracker-brief-cell"><a class="brief-icon-link" href="{escape(href)}" title="Open brief: {escape(period)}" aria-label="Open brief for {escape(period)}"><span class="folder-icon" aria-hidden="true"></span></a><span class="brief-period">{escape(period)}</span></td>'
         return f"<td>{escape(str(text or ''))}</td>"
     if field == "Continuity":
         href = row.get("Continuity Brief Href", "")
@@ -1493,9 +1521,14 @@ def news_context_card(row, label):
     url = row.get("url") or "#"
     country_names = {"SG": "Singapore", "MY": "Malaysia", "PH": "Philippines", "ID": "Indonesia", "TH": "Thailand", "VN": "Vietnam"}
     affected = row.get("affected_countries") or row.get("countries") or ""
-    if not affected:
-        affected_codes = [code for code in country_names if news_affects_country(row, code)]
-        affected = ", ".join(country_names[code] for code in affected_codes) if affected_codes else "SEA6 / all countries"
+    affected_codes = [
+        code for code in country_names
+        if code in {part.strip().upper() for part in str(affected).replace(";", ",").split(",")}
+        or news_affects_country(row, code)
+    ]
+    if not affected_codes and not affected:
+        affected_codes = list(country_names)
+    affected_html = "".join(f'<span class="country-code-tag">{code}</span>' for code in affected_codes)
     matched_html = f'<p><b>Matched game:</b> {escape(matched)}</p>' if matched else ""
     link_html = f'<a href="{escape(url)}" target="_blank" rel="noopener">View source</a>' if url != "#" else ""
     parts = [
@@ -1507,7 +1540,7 @@ def news_context_card(row, label):
     if matched_html:
         parts.append(f"  {matched_html}")
     parts.extend([
-        f"  <p><b>Affected countries:</b> {escape(affected)}</p>",
+        f'  <p class="affected-markets"><b>Affected markets:</b> <span class="country-code-tags">{affected_html}</span></p>',
         f"  <div class=\"news-key-details\"><b>Key details</b><p>{escape(news_key_details(row))}</p></div>",
         f"  <p class=\"news-why-matters\"><b>Why it matters</b><span>{escape(news_why_matters(row))}</span></p>",
         f"  {link_html}" if link_html else "",
@@ -1684,7 +1717,7 @@ def tracker_page(rows, schedule, metadata):
   <label>Search <input id="trackerSearch" placeholder="Game, publisher, genre" aria-label="Search games"></label>
   <label>Year <select id="trackerYear"><option value="all">All</option></select></label>
   <label>Month <select id="trackerMonth"><option value="all">All</option><option value="01">January</option><option value="02">February</option><option value="03">March</option><option value="04">April</option><option value="05">May</option><option value="06">June</option><option value="07">July</option><option value="08">August</option><option value="09">September</option><option value="10">October</option><option value="11">November</option><option value="12">December</option></select></label>
-  <label>Sort <select id="trackerSort"><option value="date">Date</option><option value="revenue">Gross revenue</option><option value="downloads">Downloads</option><option value="country">Country</option><option value="title">Game title A-Z</option><option value="platform">Platform</option><option value="publisher">Publisher</option><option value="developer">Developer</option></select></label>
+  <label>Sort <select id="trackerSort"><option value="date">Date</option><option value="revenue">Gross revenue</option><option value="downloads">Downloads</option><option value="country">Country</option><option value="title">Game title A-Z</option><option value="platform">Platform</option><option value="publisher">Publisher</option></select></label>
   <label>Order <select id="trackerSortDirection"><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
   <button type="button" id="clearTrackerFilters">Clear</button>
 </section>
@@ -2010,7 +2043,7 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 .fixed-secondary-row{min-height:54px!important;padding:5px clamp(12px,2vw,24px)!important}
 .fixed-secondary-inner{min-height:44px!important;gap:10px!important}
 .sea-tab{padding:5px 8px!important;min-height:28px!important}
-.on-page-nav{float:left!important;position:sticky!important;top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 12px)!important;margin:0 12px 8px -52px!important;width:38px!important}
+.on-page-nav{position:fixed!important;top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 12px)!important;left:12px!important;margin:0!important;width:38px!important;z-index:55!important}
 .on-page-toggle{width:38px!important;min-height:36px!important;padding:7px!important;box-shadow:0 3px 10px rgba(9,30,66,.10)}
 .on-page-nav[aria-expanded="true"]{width:190px!important;margin-right:8px!important}
 .on-page-nav[aria-expanded="true"] .on-page-toggle{width:190px!important}
@@ -2055,11 +2088,15 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 .tracker-brief-cell{display:flex;align-items:center;gap:7px;min-width:150px}
 .brief-icon-link{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:1px solid #BFD8F5;border-radius:7px;background:#EEF6FF;color:#174C82;text-decoration:none;font-size:15px}
 .brief-icon-link:hover,.brief-icon-link:focus-visible{background:#126B59;color:#fff}
+.folder-icon{position:relative;display:block;width:15px;height:11px;margin-top:3px;border:2px solid currentColor;border-radius:2px;background:#F6C453;box-sizing:border-box}
+.folder-icon::before{content:"";position:absolute;left:-2px;top:-6px;width:8px;height:5px;border:2px solid currentColor;border-bottom:0;border-radius:2px 2px 0 0;background:#F6C453}
+.country-code-tags{display:inline-flex;flex-wrap:wrap;gap:4px;vertical-align:middle}
+.country-code-tag{display:inline-flex;align-items:center;justify-content:center;min-width:25px;padding:3px 5px;border:1px solid #BFD8F5;border-radius:5px;background:#EEF6FF;color:#174C82;font-size:10px;font-weight:900;letter-spacing:.04em}
 .brief-period{font-size:11px;color:#536579;line-height:1.25}
 .data-table th:first-child,.data-table td:first-child{position:sticky;left:0;z-index:2;background:#fff}
 @media(max-width:768px){
   :root{--dashboard-header-height:132px;--dashboard-secondary-height:104px}
-  .on-page-nav{float:none!important;position:relative!important;top:auto!important;width:100%!important;margin:0 0 10px!important}
+  .on-page-nav{position:fixed!important;top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 8px)!important;left:12px!important;width:42px!important;margin:0!important;z-index:55!important}
   .on-page-nav[aria-expanded="true"]{width:100%!important;margin-right:0!important}
   .on-page-toggle,.on-page-nav[aria-expanded="true"] .on-page-toggle{width:auto!important}
   .pc-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -2093,6 +2130,7 @@ def main(argv=None):
         schedule = dict(schedule)
         schedule["upcoming_meeting_date"] = args.meeting_date
     rows = source_report_rows(metadata, schedule)
+    require_valid_game_genres(rows)
     news_context = source_news_context(rows, schedule)
     sea_games = source_sea_game_layer(rows, schedule)
     DOCS.mkdir(parents=True, exist_ok=True)

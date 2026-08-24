@@ -157,6 +157,15 @@ def main():
             exporter.WEEKLY_SUMMARY = output / "weekly_candidate_capture_summary.json"
             exporter.SCHEDULE = config / "static_report_schedule.json"
             exporter.MEETING_PACK_OUTPUT_ROOT = output / "meeting_pack"
+            production_genre_reference = exporter.GENRE_REFERENCE_PATH
+            exporter.GENRE_REFERENCE_PATH = tmp_path / "data" / "reference" / "game_genre_sources.csv"
+            fixture_genres = exporter.read_csv(production_genre_reference)
+            fixture_genres.append({"report_name": "SEA Shared RPG", "genre": "RPG", "genre_source_url": "https://example.com/sea-shared-rpg"})
+            write_csv(
+                exporter.GENRE_REFERENCE_PATH,
+                fixture_genres,
+                ["report_name", "genre", "genre_source_url"],
+            )
 
             write_csv(
                 meeting_dir / "game_report_layer.csv",
@@ -303,7 +312,10 @@ def main():
                         "summary_sentence_2": "The title has SG revenue and matching PC evidence.",
                         "release_date_source_url": "https://example.com/release",
                         "source_urls": "https://example.com",
-                    }
+                    },
+                    {"report_name": "SEA Shared RPG", "genre": "RPG", "source_urls": "https://example.com/sea-shared-rpg"},
+                    {"report_name": "Star Sailors", "genre": "Turn-based collectible RPG", "source_urls": "https://example.com/star-sailors"},
+                    {"report_name": "Pass the Fear", "genre": "Roguelite shooter", "source_urls": "https://example.com/pass-the-fear"},
                 ],
                 GAME_ENRICHED_FIELDS,
             )
@@ -505,8 +517,8 @@ def main():
             assert_true(".fixed-secondary-row{position:fixed!important;top:var(--dashboard-header-height)!important" in css, "context and country tabs should share the second fixed row")
             assert_true(".sea-country-tabs{position:static!important" in css, "country tab bar should sit inside the fixed second row")
             assert_true("overflow:visible!important" in css and "flex-wrap:wrap!important" in css, "country tabs should wrap instead of horizontally scrolling")
-            assert_true("21 Jul-01 Aug 2026" in latest_html, "context dates should use compact visible labels")
-            assert_true("Meeting 04 Aug 2026" in latest_html and "Data 01 Aug 2026" in latest_html, "meeting and data labels should retain the year")
+            assert_true("Period: 21 Jul 2026 to 01 Aug 2026" in latest_html, "context dates should use explicit period labels")
+            assert_true("Meeting: 04 Aug 2026" in latest_html and "Data as of: 01 Aug 2026" in latest_html, "meeting and data labels should retain their labels")
             assert_true(".fixed-secondary-inner{max-width:1480px!important;margin:0 auto!important" in css, "secondary navigation should use a centered inner container")
             assert_true(".dashboard-page main#main-content{padding-top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 16px)!important}" in css, "content should clear the compact fixed stack")
             assert_true("Previous Briefs" not in latest_html, "duplicate previous-brief action should be removed from the context row")
