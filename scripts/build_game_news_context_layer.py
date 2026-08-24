@@ -22,11 +22,21 @@ PUBLIC_GAME_RADAR_URL = (
 
 DEFAULT_ANNOUNCEMENT_MIN_SCORE = 70
 DEFAULT_INDUSTRY_MIN_SCORE = 70
-DEFAULT_INDUSTRY_MAX_ROWS = 3
+DEFAULT_INDUSTRY_MAX_ROWS = 8
 
 ANNOUNCEMENT_REVIEW_MARKERS = re.compile(
     r"\b(pre[- ]?registration|technical test|beta test|launch(?:es|ed|ing)?|"
     r"release date|confirmed release|delayed?|postponed?|coming to|opens? in)\b",
+    re.I,
+)
+
+# These markers widen the editorial queue only. They never publish an item by
+# themselves; a reviewer must still explicitly approve it in the review CSV.
+INDUSTRY_REVIEW_MARKERS = re.compile(
+    r"\b(acquisition|acquire[ds]?|merger|investment|funding|revenue|earnings|"
+    r"q[1-4]|iap|in[- ]?app purchase|ad spend|moneti[sz]ation|app store|"
+    r"google play|platform policy|store policy|disc[- ]?to[- ]?digital|"
+    r"physical games?|digital distribution|layoffs?)\b",
     re.I,
 )
 
@@ -205,8 +215,31 @@ def load_radar_payload(source):
 
 
 def radar_candidates(payload):
-    hot = payload.get("hot_news", []) if isinstance(payload, dict) else []
-    return hot if isinstance(hot, list) else []
+    """Use hot stories plus the full classified feed for historical editorial review.
+
+    Hot news remains the priority signal. The full feed adds factual in-period
+    announcements and industry items that did not receive a hot score, so a
+    historical brief is not silently blank just because a live snapshot aged
+    out of the hot-news list.
+    """
+    if not isinstance(payload, dict):
+        return []
+    candidates = []
+    seen = set()
+    for collection_name in ("hot_news", "items"):
+        collection = payload.get(collection_name, [])
+        if not isinstance(collection, list):
+            continue
+        for item in collection:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("url") or item.get("title_en") or item.get("title") or "").strip()
+            if key and key in seen:
+                continue
+            if key:
+                seen.add(key)
+            candidates.append(item)
+    return candidates
 
 
 def hot_score(item):
@@ -222,6 +255,14 @@ def qualifying_announcement_candidate(item):
         return False
     text = " ".join(str(item.get(field) or "") for field in ("title", "title_en", "url"))
     return bool(ANNOUNCEMENT_REVIEW_MARKERS.search(text))
+
+
+def qualifying_industry_candidate(item):
+    """Identify factual market topics worth editorial review without auto-including them."""
+    if item.get("radar_section") != SECTION_INDUSTRY_REPORTS:
+        return False
+    text = " ".join(str(item.get(field) or "") for field in ("title", "title_en", "url"))
+    return bool(INDUSTRY_REVIEW_MARKERS.search(text))
 
 
 def story_key(item):
@@ -271,19 +312,23 @@ def prior_context_keys(meeting_date):
         folder_date = parse_date(folder.name)
         if not folder_date or folder_date >= current:
             continue
-        for filename in ("news_context_review.csv", "news_context_layer.csv"):
-            path = folder / filename
-            if not path.exists():
+        # Only published editorial decisions suppress a later story. An
+        # unreviewed or rejected candidate must not hide a new relevant item.
+        path = folder / "news_context_review.csv"
+        if not path.exists():
+            continue
+        for row in read_csv(path):
+            included = str(row.get("include_in_final_report") or "").strip().lower() == "yes"
+            decision = str(row.get("editor_decision") or "").strip().lower() == "include"
+            if not (included and decision):
                 continue
-            for row in read_csv(path):
-                if row.get("url"):
-                    prior["urls"].add(row["url"])
-                title_key = normalize_title(row.get("title_en") or row.get("title"))
-                if title_key:
-                    prior["titles"].add(title_key)
-                if row.get("story_key"):
-                    prior["stories"].add(row["story_key"])
-            break
+            if row.get("url"):
+                prior["urls"].add(row["url"])
+            title_key = normalize_title(row.get("title_en") or row.get("title"))
+            if title_key:
+                prior["titles"].add(title_key)
+            if row.get("story_key"):
+                prior["stories"].add(row["story_key"])
     return prior
 
 
@@ -402,7 +447,9 @@ def build_rows(
                 seen_urls.add(url)
             continue
 
-        if section == SECTION_INDUSTRY_REPORTS and score >= industry_min_score:
+        if section == SECTION_INDUSTRY_REPORTS and (
+            score >= industry_min_score or qualifying_industry_candidate(item)
+        ):
             if key and key in seen_stories:
                 continue
             industry_rows.append(
@@ -415,7 +462,13 @@ def build_rows(
                     "industry_trend",
                     "",
                     "industry_story_theme",
-                    "Industry trend selected from high-score radar item; repeated story themes from earlier briefs are suppressed.",
+                    (
+                        "Industry trend review candidate: high-score radar item; "
+                        "repeated story themes from earlier briefs are suppressed."
+                        if score >= industry_min_score
+                        else "Industry trend review candidate: factual market marker; "
+                        "editorial approval required and repeated story themes are suppressed."
+                    ),
                 )
             )
             if url:

@@ -6,8 +6,6 @@ from test_temp_utils import repo_temp_dir
 
 
 FIELDS = [
-    "Signal Type",
-    "Signal Definition",
     "SG Gross Revenue",
     "SG Downloads",
     "Inclusion Reason",
@@ -62,13 +60,13 @@ NEWS_CONTEXT_FIELDS = [
     "final_report_section",
     "editor_decision",
     "editor_note",
+    "key_details",
+    "why_it_matters",
 ]
 
 
 def row(title, period_start, period_end, revenue="1000"):
     return {
-        "Signal Type": "Strong Market Signal",
-        "Signal Definition": "Test signal",
         "SG Gross Revenue": revenue,
         "SG Downloads": "100",
         "Inclusion Reason": "Lifecycle regression fixture.",
@@ -165,6 +163,8 @@ def write_news_context_csv(path):
                     "final_report_section": "Industry Trends",
                     "editor_decision": "include",
                     "editor_note": "Fixture-approved context",
+                    "key_details": "The source reports a future game announcement.",
+                    "why_it_matters": "A future release watch relevant to this brief.",
                 }
             )
         writer = csv.DictWriter(handle, fieldnames=NEWS_CONTEXT_FIELDS)
@@ -271,10 +271,15 @@ def main():
         assert_true("23 Jun 2026 to 13 Jul 2026" in latest_html, "Latest brief should show finalized July period.")
         assert_true("CookieRun Classic" in latest_html, "Latest brief should include CookieRun Classic.")
         assert_true("Star Sailors" in latest_html, "Latest brief should preserve Star Sailors.")
-        assert_true("Game News Context" in latest_html, "Latest brief should include the news context section.")
+        assert_true("SEA6-related Articles" in latest_html, "Latest brief should include the SEA6 article section.")
+        assert_true("News that influence or affect the gaming world." in latest_html, "Latest brief should use the approved Industry Trends description.")
+        assert_true("Future Releases and/or Pre-Launch Affairs." in latest_html, "Latest brief should use the approved Game Announcements description.")
+        assert_true("Top 3 SEA6 revenue markets" not in latest_html, "Latest brief should not use the old top-three market wording.")
+        assert_true("Key details" in latest_html and "Why it matters" in latest_html, "Latest brief should separate news facts and relevance.")
+        assert_true("Score 74" not in latest_html, "Latest brief should keep article scores out of visible cards.")
         assert_true("Future RPG release date announced" in latest_html, "Latest brief should show high-score announcements.")
-        assert_true("Star Sailors launches worldwide" in latest_html, "Latest brief should show release-support news.")
-        assert_true("Fixture-approved context" in latest_html, "Latest brief should show reviewed editor notes.")
+        assert_true("Release Support" not in latest_html, "Latest brief should not show release-support news.")
+        assert_true("A future release watch relevant to this brief." in latest_html, "Latest brief should show reviewed relevance annotations.")
         assert_true("Staging Game" not in latest_html, "Weekly staging output must not replace Latest Brief.")
         assert_true("Current brief" not in archive_html, "Archive must not label staging as Current brief.")
         assert_true("No proof reports yet." in archive_html, "Archive should show empty state without proof runs.")
@@ -283,10 +288,10 @@ def main():
             "Staging empty state should appear outside the Latest Brief.",
         )
         assert_true(titles == {"Star Sailors", "CookieRun Classic"}, "Final JSON should contain only finalized brief rows.")
-        assert_true(len(payload["news_context"]) == 2, "Final JSON should include news context rows.")
+        assert_true(len(payload["news_context"]) == 1, "Final JSON should include only retained news context rows.")
         assert_true(
-            {item["context_type"] for item in payload["news_context"]} == {"high_score_game_announcement", "selected_game_release_news"},
-            "Final JSON should preserve news context types.",
+            {item["context_type"] for item in payload["news_context"]} == {"high_score_game_announcement"},
+            "Final JSON should keep only industry and announcement context types.",
         )
         assert_true(staging["mode"] == "weekly-capture", "Weekly staging summary should keep mode.")
         assert_true(staging["candidate_count"] == 0, "Weekly staging summary should keep candidate count.")

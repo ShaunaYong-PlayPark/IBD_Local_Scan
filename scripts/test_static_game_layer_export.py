@@ -64,6 +64,8 @@ NEWS_FIELDS = [
     "final_report_section",
     "editor_decision",
     "editor_note",
+    "key_details",
+    "why_it_matters",
 ]
 
 SEA_FIELDS = [
@@ -76,6 +78,8 @@ SEA_FIELDS = [
     "id_revenue_gross", "id_revenue_prior_store", "id_downloads", "id_ios_rank", "id_android_rank",
     "th_revenue_gross", "th_revenue_prior_store", "th_downloads", "th_ios_rank", "th_android_rank",
     "vn_revenue_gross", "vn_revenue_prior_store", "vn_downloads", "vn_ios_rank", "vn_android_rank",
+    "sea_market_1_country", "sea_market_1_revenue_gross", "sea_market_2_country", "sea_market_2_revenue_gross",
+    "sea_market_3_country", "sea_market_3_revenue_gross", "sea_market_4_country", "sea_market_4_revenue_gross",
     "report_start_date", "report_end_date", "ranking_data_as_of", "meeting_date", "source_files",
 ]
 
@@ -168,6 +172,30 @@ def main():
                         "sg_revenue_gross": "5000",
                         "sg_downloads": "1000",
                         "sg_release_date_reference": "2026-07-22",
+                    },
+                    {
+                        "report_classification": "mobile_led_cross_platform",
+                        "meeting_date": "2026-08-04",
+                        "report_start_date": "2026-07-21",
+                        "report_end_date": "2026-08-01",
+                        "unified_name": "Hololive Dreams",
+                        "english_report_name": "Hololive Dreams",
+                        "unified_id": "holo",
+                        "sea_st_gross_revenue": "20000",
+                        "sea_st_downloads": "9000",
+                        "countries_detected": "SG, MY, TH",
+                        "sg_revenue_gross": "5000",
+                        "sg_revenue_prior_store": "0",
+                        "my_revenue_gross": "6000",
+                        "my_revenue_prior_store": "0",
+                        "th_revenue_gross": "4000",
+                        "th_revenue_prior_store": "0",
+                        "sea_market_1_country": "SG",
+                        "sea_market_1_revenue_gross": "10000",
+                        "sea_market_2_country": "MY",
+                        "sea_market_2_revenue_gross": "6000",
+                        "sea_market_3_country": "TH",
+                        "sea_market_3_revenue_gross": "4000",
                     },
                     {
                         "report_classification": "mobile_led_cross_platform",
@@ -297,6 +325,8 @@ def main():
                         "final_report_section": "Game Announcements",
                         "editor_decision": "include",
                         "editor_note": "Reviewed announcement note.",
+                        "key_details": "Call of Duty: Modern Warfare 4 has a future release date reported by the source.",
+                        "why_it_matters": "A future release watch relevant to the report period.",
                     },
                     {
                         "meeting_date": "2026-08-04",
@@ -330,6 +360,28 @@ def main():
                         "final_report_section": "Game Announcements",
                         "editor_decision": "include",
                         "editor_note": "Approved regional announcement.",
+                        "key_details": "The source reports a regional launch announcement and technical test.",
+                        "why_it_matters": "Regional launch context relevant across SEA6.",
+                    },
+                    {
+                        "meeting_date": "2026-08-04",
+                        "report_start_date": "2026-07-21",
+                        "report_end_date": "2026-08-03",
+                        "context_type": "industry_trend",
+                        "event_date": "2026-07-29",
+                        "hot_score": "82",
+                        "source": "Business Games Source",
+                        "region": "GLOBAL",
+                        "title": "Embracer completes a separate publishing acquisition",
+                        "title_en": "Embracer completes a separate publishing acquisition",
+                        "url": "https://example.com/embracer-acquisition",
+                        "story_key": "publisher_mna",
+                        "include_in_final_report": "yes",
+                        "final_report_section": "Industry Trends",
+                        "editor_decision": "include",
+                        "editor_note": "Relevant industry ownership context.",
+                        "key_details": "Embracer completed a separate publishing acquisition reported by the source.",
+                        "why_it_matters": "A global industry ownership development relevant to gaming companies.",
                     },
                 ],
                 NEWS_FIELDS,
@@ -360,6 +412,32 @@ def main():
                         "ph_revenue_gross": "2000",
                         "ph_revenue_prior_store": "0",
                         "ranking_data_as_of": "2026-08-03",
+                        "meeting_date": "2026-08-04",
+                    },
+                    {
+                        "unified_id": "holo",
+                        "game_title": "Hololive Dreams",
+                        "original_title": "Hololive Dreams",
+                        "publisher": "CyberAgent",
+                        "platforms": "iOS, Android, Steam",
+                        "sea_st_gross_revenue": "20000",
+                        "sea_st_downloads": "9000",
+                        "countries_detected": "SG, MY, TH",
+                        "sg_revenue_gross": "5000",
+                        "sg_revenue_prior_store": "0",
+                        "sg_downloads": "1000",
+                        "my_revenue_gross": "6000",
+                        "my_revenue_prior_store": "0",
+                        "my_downloads": "2000",
+                        "th_revenue_gross": "4000",
+                        "th_revenue_prior_store": "0",
+                        "th_downloads": "3000",
+                        "sea_market_1_country": "SG",
+                        "sea_market_1_revenue_gross": "10000",
+                        "sea_market_2_country": "MY",
+                        "sea_market_2_revenue_gross": "6000",
+                        "sea_market_3_country": "TH",
+                        "sea_market_3_revenue_gross": "4000",
                         "meeting_date": "2026-08-04",
                     },
                     {
@@ -415,7 +493,7 @@ def main():
 
             assert_true("Meeting: 04 Aug 2026" in latest_html, "meeting date should come from game layer")
             assert_true("SEA6 Summary" in latest_html, "SEA6 summary should render")
-            assert_true(latest_html.index("SEA6 Summary") < latest_html.index("Country Snapshot"), "SEA6 Summary should be the first report view")
+            assert_true(latest_html.index("SEA6 Summary") < latest_html.index("Market Snapshot"), "SEA6 Summary should be the first report view")
             assert_true("SEA6 Gaming Market" in latest_html, "latest brief should use SEA6-neutral heading")
             assert_true("Singapore Gaming Market" not in latest_html, "Singapore should not be the default visible market heading")
             assert_true('data-sea-target="sea6-summary-panel"' in latest_html, "SEA6 tab should control the summary panel")
@@ -439,17 +517,16 @@ def main():
             assert_true("Animals Garden" not in latest_html, "known-existing Animals Garden must not render")
             assert_true("Unknown Prior Game" not in latest_html, "missing prior revenue must not render")
             assert_true("Animals Garden" not in {row["game_title"] for row in payload["sea_summary"]["top_games"]}, "known-existing game must not enter SEA summary")
-            assert_true("SG" in latest_html and "MY" in latest_html, "SEA country revenue chips should render")
+            assert_true("Singapore" in latest_html and "Malaysia" in latest_html, "SEA country views should render")
             assert_true("Signal label" not in latest_html, "SEA summary should not render a signal label column")
             assert_true("Early Revenue Signal" not in latest_html, "early revenue signal labels should not render")
             assert_true("High Revenue Signal" not in latest_html, "high revenue signal labels should not render")
-            for country_code, own_value, other_value in (("my", "$18,000", "$5,000"), ("th", "$0", "$5,000")):
+            for country_code, own_value, other_value in (("my", "$18,000", "$5,000"), ("th", "$4,000", "$5,000")):
                 panel_start = latest_html.index(f'id="sea-{country_code}"')
                 panel_end = latest_html.find('<section class="sea-view-panel', panel_start + 1)
                 country_panel = latest_html[panel_start:panel_end if panel_end >= 0 else None]
-                assert_true(own_value in country_panel, f"{country_code} panel should show its own country metric")
-                if other_value != "$0":
-                    assert_true(other_value not in country_panel, f"{country_code} panel should not leak SG metrics")
+                local_metric = f'<small>ST Gross Revenue</small><b>{own_value}</b>'
+                assert_true(local_metric in country_panel, f"{country_code} panel should show its own country metric")
             sg_start = latest_html.index('id="sea-sg"')
             sg_end = latest_html.find('<section class="sea-view-panel', sg_start + 1)
             sg_panel = latest_html[sg_start:sg_end if sg_end >= 0 else None]
@@ -468,7 +545,7 @@ def main():
             ph_panel = latest_html[ph_start:ph_end if ph_end >= 0 else None]
             assert_true("$2,000" not in ph_panel, "below-threshold PH rows should not be included")
             assert_true(payload["sea_summary"]["country_summaries"]["PH"]["game_count"] == 0, "PH summary should count only PH-qualified games")
-            assert_true(payload["sea_summary"]["country_summaries"]["MY"]["game_count"] == 1, "MY summary should count its own qualifying game")
+            assert_true(payload["sea_summary"]["country_summaries"]["MY"]["game_count"] == 2, "MY summary should count its own qualifying games")
             assert_true('class="sea-non-tab-content"' in latest_html, "methodology content should remain outside country panels")
             assert_true("Future PC Game" not in latest_html, "PC-only releases outside the period should not render")
             assert_true("Old Revenue Game" not in latest_html, "old revenue-active game should not render in final report")
@@ -477,14 +554,26 @@ def main():
             assert_true("prior revenue was $0" not in star_payload["Key Details"], "key details should describe the game, not inclusion logic")
             assert_true("Mobile + PC Games" in latest_html and "Mobile-only Games" in latest_html and "PC-only Games" in latest_html, "country game sections should be segmented")
             assert_true("Mobile game</span><span class=\"metric-badge neutral\">iOS, Android" not in latest_html, "mobile-only cards should not duplicate platform pills")
-            assert_true("Country Snapshot" in latest_html, "country snapshot sections should render")
+            assert_true("Market Snapshot" in latest_html, "country market snapshot sections should render")
             assert_true(
                 "Rank data reflects the downloaded Sensor Tower chart export." in latest_html
                 and "N/A means the game was not present in the downloaded chart rows for that platform/country." in latest_html,
                 "country rank limitation note should explain downloaded chart coverage and N/A values",
             )
             assert_true(latest_html.count("PC-only Games") >= 7, "PC-only game sections should appear in SEA6 and every country panel")
-            assert_true("Pass the Fear" in latest_html and "Regional PC signal" in latest_html, "PC-only games should render as regional PC signals")
+            assert_true("Pass the Fear" in latest_html and "PC-only" in latest_html, "PC-only games should render as regional PC cards")
+            assert_true("SteamDB provides global PC release evidence. Country-level revenue is not available." in latest_html, "PC-only section should explain global SteamDB scope")
+            assert_true("1. Singapore &mdash; $10,000" in latest_html and "2. Malaysia &mdash; $6,000" in latest_html and "3. Thailand &mdash; $4,000" in latest_html, "SEA6 mobile cards should show valid top markets")
+            assert_true(
+                exporter.top_sea_revenue_markets(
+                    {"sea_market_1_country": "TH", "sea_market_1_revenue_gross": "4000", "sea_market_2_country": "MY", "sea_market_2_revenue_gross": "6000", "sea_market_3_country": "SG", "sea_market_3_revenue_gross": "10000", "sea_market_4_country": "SG", "sea_market_4_revenue_gross": "9000"}
+                )
+                == [("Singapore", 10000.0), ("Malaysia", 6000.0), ("Thailand", 4000.0)],
+                "top SEA6 markets should be unique, valid, and revenue-sorted",
+            )
+            assert_true("Top 3 SEA6 revenue markets" not in latest_html, "old top-three market wording must not render")
+            assert_true(latest_html.count("Top SEA6 Revenue Markets") >= 1, "SEA6 mobile cards should show all regional market context")
+            assert_true("Release Support" not in latest_html, "Release Support must not render")
             pc_cards = re.findall(r'<article class="regional-pc-card">(.*?)</article>', latest_html, flags=re.S)
             assert_true(pc_cards and all("ST Gross Revenue" not in card and "ST Downloads" not in card and "iOS #" not in card and "Android #" not in card for card in pc_cards), "PC signal cards must not show mobile metrics")
             steam_context = exporter.steam_context_html(
@@ -492,16 +581,33 @@ def main():
             )
             assert_true("PC equivalent / Steam context" in steam_context, "mobile+PC games should show Steam context")
             assert_true("Peak 16,791" in steam_context and "Reviews 1,000" in steam_context, "mobile+PC Steam stats should render")
-            assert_true("Malaysia Game News Context" in latest_html, "country news sections should render")
-            assert_true("Reviewed announcement note." in latest_html, "reviewed news note should render")
-            assert_true("Approved regional announcement." in latest_html, "approved blank-score regional announcement should render")
+            assert_true("Malaysia-related Articles" in latest_html, "country article sections should render")
+            for country_name in ("Singapore", "Malaysia", "Philippines", "Indonesia", "Thailand", "Vietnam"):
+                assert_true(f"{country_name}-related Articles" in latest_html, f"{country_name} article heading should render")
+            assert_true("SEA6-related Articles" in latest_html, "SEA6 article heading should render")
+            assert_true("News that influence or affect the gaming world." in latest_html, "Industry Trends description should use the approved wording")
+            assert_true("Future Releases and/or Pre-Launch Affairs." in latest_html, "Game Announcements description should use the approved wording")
+            assert_true("High-score" not in latest_html, "executive-facing output must not show high-score wording")
+            assert_true("Key details" in latest_html and "Why it matters" in latest_html, "news cards should separate factual details from relevance")
+            second_acquisition = next(row for row in payload["news_context"] if row["title"] == "Embracer completes a separate publishing acquisition")
+            second_card = exporter.news_context_card(second_acquisition, "Industry trend")
+            assert_true("Embracer completed a separate publishing acquisition" in second_card, "second acquisition should use its own editorial key details")
+            assert_true("Electronic Arts completed" not in second_card, "second acquisition must not inherit EA-specific text")
+            assert_true("Call of Duty: Modern Warfare 4 has a future release date reported by the source." in latest_html, "reviewed news key details should render")
+            assert_true("Regional launch context relevant across SEA6." in latest_html, "approved blank-score regional relevance should render")
             assert_true("Game Announcement" in latest_html and "High-score announcement" not in latest_html, "announcement cards should use the neutral Game Announcement label")
-            assert_true("Score 0" not in latest_html, "blank-score announcements should not show a score badge")
+            assert_true(not re.search(r"Score\s+[-+]?\d", latest_html), "news cards should not show score badges")
+            for anchor in ("sea6-market-snapshot", "sea6-mobile-pc-games", "sea6-mobile-only-games", "sea6-pc-only-games", "sea6-industry-trends", "sea6-game-announcements"):
+                assert_true(f'id="{anchor}"' in latest_html, f"SEA6 bookmark target {anchor} should render")
             for country_code in ("sg", "my", "ph", "id", "th", "vn"):
                 panel_start = latest_html.index(f'id="sea-{country_code}"')
                 panel_end = latest_html.find('<section class="sea-view-panel', panel_start + 1)
                 country_panel = latest_html[panel_start:panel_end if panel_end >= 0 else None]
                 assert_true("Regional launch announcement with technical test" in country_panel, f"regional announcement should render in {country_code.upper()}")
+                if 'class="sea-country-card"' in country_panel:
+                    assert_true("Top SEA6 Revenue Markets" in country_panel, f"regional market context should render in {country_code.upper()} mobile cards")
+                for suffix in ("market-snapshot", "mobile-pc-games", "mobile-only-games", "pc-only-games", "industry-trends", "game-announcements"):
+                    assert_true(f'id="{country_code}-{suffix}"' in country_panel, f"{country_code.upper()} bookmark target {suffix} should render")
             assert_true("Out-of-period announcement" not in latest_html, "out-of-period news should not render")
             assert_true("SG Performance" not in latest_html, "SG performance blocks should not be used in SEA6 country views")
             pc_payload = next(row for row in payload["rows"] if row["Game Title"] == "Pass the Fear")
@@ -511,11 +617,11 @@ def main():
                 assert_true(pc_row["SG Downloads"] == "", "PC-only rows should not export SG downloads")
                 assert_true(pc_row["Top 3 Markets"] == "", "PC-only rows should not export SEA markets")
                 assert_true(pc_row["SG App Store Ranks"] == "", "PC-only rows should not export app store ranks")
-            assert_true(len(payload["rows"]) == 4, "final JSON should use qualifying game layer rows")
-            assert_true(len(payload["news_context"]) == 2, "final JSON should use reviewed news rows")
+            assert_true(len(payload["rows"]) == 5, "final JSON should use qualifying game layer rows")
+            assert_true(len(payload["news_context"]) == 3, "final JSON should use reviewed news rows")
             assert_true(payload["sea_summary"]["ranking_data_as_of"] == "2026-08-03", "SEA summary ranking date should be exported")
             assert_true(payload["sea_games"][0]["game_title"] == "SEA Shared RPG", "SEA games should be exported")
-            assert_true(len(exported_rows) == 4, "final CSV export should match qualifying game layer rows")
+            assert_true(len(exported_rows) == 5, "final CSV export should match qualifying game layer rows")
     finally:
         exporter.DOCS = originals["docs"]
         exporter.ASSETS = originals["assets"]

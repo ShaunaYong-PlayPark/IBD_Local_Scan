@@ -58,6 +58,12 @@ def main():
             _, regenerated = review.build("2026-07-28")
             assert_true(regenerated[0]["include_in_final_report"] == "yes", "regeneration preserves include decision")
             assert_true(regenerated[0]["editor_note"] == "Approved fixture row", "regeneration preserves editor note")
+            rows[0]["key_details"] = "Fixture factual details."
+            rows[0]["why_it_matters"] = "Fixture relevance."
+            write_csv(destination, rows, RAW_FIELDS + review.REVIEW_FIELDS)
+            _, regenerated = review.build("2026-07-28")
+            assert_true(regenerated[0]["key_details"] == "Fixture factual details.", "regeneration preserves key details")
+            assert_true(regenerated[0]["why_it_matters"] == "Fixture relevance.", "regeneration preserves why it matters")
             assert_true(regenerated[1]["include_in_final_report"] == "", "unreviewed row remains blank")
             included = exporter.source_news_context([], {"upcoming_meeting_date": "2026-07-28"})
             assert_true(len(included) == 1 and included[0]["title"] == "Announcement", "only yes rows are included")

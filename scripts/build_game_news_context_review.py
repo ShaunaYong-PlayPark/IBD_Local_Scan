@@ -12,7 +12,10 @@ REVIEW_FIELDS = [
     "final_report_section",
     "editor_decision",
     "editor_note",
+    "key_details",
+    "why_it_matters",
 ]
+PRESERVED_EDITORIAL_FIELDS = REVIEW_FIELDS + ["title_en"]
 
 
 def read_csv(path):
@@ -40,6 +43,13 @@ def row_key(row):
     return str(row.get("url") or row.get("title_en") or row.get("title") or "").strip()
 
 
+def is_approved(row):
+    return (
+        str(row.get("include_in_final_report") or "").strip().lower() == "yes"
+        and str(row.get("editor_decision") or "").strip().lower() == "include"
+    )
+
+
 def build(meeting_date):
     source = raw_path(meeting_date)
     destination = review_path(meeting_date)
@@ -53,9 +63,21 @@ def build(meeting_date):
     for raw in raw_rows:
         row = dict(raw)
         prior = existing.get(row_key(raw), {})
-        for field in REVIEW_FIELDS:
-            row[field] = prior.get(field, "")
+        for field in PRESERVED_EDITORIAL_FIELDS:
+            if field == "title_en":
+                # Keep an editor's translated/normalised display title, but
+                # retain a fresh Radar translation when no override exists.
+                row[field] = prior.get(field) or row.get(field, "")
+            else:
+                row[field] = prior.get(field, "")
         rows.append(row)
+
+    # Radar snapshots age out. Keep a prior approved editorial item even when
+    # the current snapshot no longer carries its raw source row.
+    present_keys = {row_key(row) for row in rows if row_key(row)}
+    for key, prior in existing.items():
+        if key not in present_keys and is_approved(prior):
+            rows.append(prior)
     write_csv(destination, rows, fields + REVIEW_FIELDS)
     return destination, rows
 
