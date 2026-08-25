@@ -306,7 +306,7 @@ def main():
                         "release_date_used": "2026-07-23",
                         "developer": "Test Dev",
                         "publisher": "CyberAgent",
-                        "genre": "Rhythm RPG",
+                        "genre": "Music/Rhythm; RPG",
                         "platforms_confirmed": "Mobile + PC",
                         "summary_sentence_1": "Hololive Dreams is a mobile-led cross-platform game.",
                         "summary_sentence_2": "The title has SG revenue and matching PC evidence.",
@@ -314,8 +314,8 @@ def main():
                         "source_urls": "https://example.com",
                     },
                     {"report_name": "SEA Shared RPG", "genre": "RPG", "source_urls": "https://example.com/sea-shared-rpg"},
-                    {"report_name": "Star Sailors", "genre": "Turn-based collectible RPG", "source_urls": "https://example.com/star-sailors"},
-                    {"report_name": "Pass the Fear", "genre": "Roguelite shooter", "source_urls": "https://example.com/pass-the-fear"},
+                    {"report_name": "Star Sailors", "genre": "RPG; Turn-Based Strategy", "source_urls": "https://example.com/star-sailors"},
+                    {"report_name": "Pass the Fear", "genre": "Roguelite; Shooter", "source_urls": "https://example.com/pass-the-fear"},
                 ],
                 GAME_ENRICHED_FIELDS,
             )
@@ -486,7 +486,7 @@ def main():
             )
             exporter.SCHEDULE.parent.mkdir(parents=True, exist_ok=True)
             exporter.SCHEDULE.write_text(
-                json.dumps({"last_completed_meeting_date": "2026-07-21", "upcoming_meeting_date": "2026-08-04"}),
+                json.dumps({"last_completed_meeting_date": "2026-08-04", "upcoming_meeting_date": "2026-09-01"}),
                 encoding="utf-8",
             )
             exporter.WEEKLY_SUMMARY.parent.mkdir(parents=True, exist_ok=True)
@@ -503,9 +503,10 @@ def main():
                 assert_true("signal_definition" not in exported_row, "signal_definition must not be exported")
                 assert_true(str(exported_row.get("registry_game_id", "")).strip().lower() != "unconfirmed", "unconfirmed registry IDs must not be exported")
 
-            assert_true("Meeting: 04 Aug 2026" in latest_html, "meeting date should come from game layer")
+            assert_true("Meeting: 04 Aug 2026" in latest_html, "normal export should use the schedule's last completed meeting")
+            assert_true("Meeting: 01 Sep 2026" not in latest_html, "normal export must not use the upcoming meeting as Latest Brief")
             assert_true("SEA6 Summary" in latest_html, "SEA6 summary should render")
-            assert_true(latest_html.index("SEA6 Summary") < latest_html.index("Market Snapshot"), "SEA6 Summary should be the first report view")
+            assert_true(latest_html.index('<h2 id="sea6-summary">SEA6 Summary') < latest_html.index('<section id="sea6-market-snapshot">'), "SEA6 Summary should be the first report view")
             assert_true("SEA6 Gaming Market" in latest_html, "latest brief should use SEA6-neutral heading")
             assert_true("Singapore Gaming Market" not in latest_html, "Singapore should not be the default visible market heading")
             assert_true('data-sea-target="sea6-summary-panel"' in latest_html, "SEA6 tab should control the summary panel")
@@ -564,7 +565,7 @@ def main():
             star_payload = next(row for row in payload["rows"] if row["Game Title"] == "Star Sailors")
             assert_true("prior revenue was $0" in star_payload["Inclusion Reason"], "commercial-signal inclusion reason should stay in data")
             assert_true("prior revenue was $0" not in star_payload["Key Details"], "key details should describe the game, not inclusion logic")
-            assert_true("Mobile + PC Games" in latest_html and "Mobile-only Games" in latest_html and "PC-only Games" in latest_html, "country game sections should be segmented")
+            assert_true("Mobile + PC/Console Games" in latest_html and "Mobile-only Games" in latest_html and "PC/Console-only Games" in latest_html, "country game sections should be segmented")
             assert_true("Mobile game</span><span class=\"metric-badge neutral\">iOS, Android" not in latest_html, "mobile-only cards should not duplicate platform pills")
             assert_true("Market Snapshot" in latest_html, "country market snapshot sections should render")
             assert_true(
@@ -572,7 +573,7 @@ def main():
                 and "N/A means the game was not present in the downloaded chart rows for that platform/country." in latest_html,
                 "country rank limitation note should explain downloaded chart coverage and N/A values",
             )
-            assert_true(latest_html.count("PC-only Games") >= 7, "PC-only game sections should appear in SEA6 and every country panel")
+            assert_true(latest_html.count("PC/Console-only Games") >= 7, "PC/Console-only game sections should appear in SEA6 and every country panel")
             assert_true("Pass the Fear" in latest_html and "PC-only" in latest_html, "PC-only games should render as regional PC cards")
             assert_true("SteamDB provides global PC release evidence. Country-level revenue is not available." in latest_html, "PC-only section should explain global SteamDB scope")
             assert_true("market-rank-1" in latest_html and "Singapore" in latest_html and "$10,000" in latest_html and "Malaysia" in latest_html and "$6,000" in latest_html and "Thailand" in latest_html and "$4,000" in latest_html, "SEA6 mobile cards should show valid ranked markets")

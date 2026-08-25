@@ -128,12 +128,12 @@ def test_news_context_layer_uses_locked_ibd_rules():
         by_url = {row["url"]: row for row in rows}
 
         assert_true(out.exists(), "news context output exists")
-        assert_equal(len(rows), 3, "matched release, high-score announcement, and industry trend included")
-        assert_equal(len(written), 3, "writes three rows")
+        assert_equal(len(rows), 4, "matched release, high-score announcement, low-score qualifying announcement, and industry trend included")
+        assert_equal(len(written), 4, "writes four rows")
         assert_true("https://example.com/matched-release" in by_url, "matched release included")
         assert_true("https://example.com/high-announcement" in by_url, "high-score announcement included")
         assert_true("https://example.com/unmatched-release" not in by_url, "unmatched release excluded")
-        assert_true("https://example.com/low-announcement" not in by_url, "low announcement excluded")
+        assert_true("https://example.com/low-announcement" in by_url, "low-score release-date announcement included as a review candidate")
         assert_true("https://example.com/after-period" not in by_url, "after-period announcement excluded")
         assert_true("https://example.com/industry" in by_url, "industry trend included")
         assert_equal(
@@ -145,6 +145,19 @@ def test_news_context_layer_uses_locked_ibd_rules():
             by_url["https://example.com/high-announcement"]["context_type"],
             "high_score_game_announcement",
             "announcement context type",
+        )
+        assert_equal(
+            by_url["https://example.com/low-announcement"]["context_type"],
+            "high_score_game_announcement",
+            "low-score announcement remains a review-candidate context type",
+        )
+        assert_true(
+            "qualifying regional launch or release announcement marker" in by_url["https://example.com/low-announcement"]["inclusion_reason"],
+            "low-score announcement is included because of its qualifying marker",
+        )
+        assert_true(
+            by_url["https://example.com/low-announcement"].get("include_in_final_report", "") == "",
+            "review candidate does not imply automatic final-report inclusion",
         )
         assert_equal(
             by_url["https://example.com/industry"]["context_type"],

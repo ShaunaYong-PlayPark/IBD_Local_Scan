@@ -42,6 +42,13 @@ GAME_ENRICHED_FILENAME = "game_enriched_layer.csv"
 SEA_GAME_LAYER_FILENAME = "sea_game_layer.csv"
 PROOF_RUNS = DOCS / "proof-runs"
 
+# Console tags are emitted only from explicit, title-matched research confirmations.
+CONSOLE_SOURCE_BY_TITLE = {
+    "sandustry": "https://www.xbox.com/en-US/games/store/sandustry-game-preview/9pph71dv44t7",
+    "echoes of aincrad": "https://en.bandainamcoent.eu/sword-art-online/echoes-of-aincrad",
+    "palworld": "https://store.playstation.com/en-us/product/UP6360-PPSA23126_00-0112788005082769/",
+}
+
 
 NAV_ITEMS = [
     ("latest-brief.html", "Latest Brief", "Read the current executive market update.", "latest"),
@@ -135,6 +142,33 @@ def compact_date(value, include_year=False):
     return parts[0] if len(parts) == 2 and parts[1].isdigit() else formatted
 
 
+def compact_period(start, end):
+    start_date = parse_date(start)
+    end_date = parse_date(end)
+    if not start_date or not end_date:
+        return f"{display_date(start)} to {display_date(end)}".strip(" to")
+    if start_date.year == end_date.year:
+        return f"{start_date.strftime('%d %b')} to {end_date.strftime('%d %b %Y')}"
+    return f"{start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}"
+
+
+def apply_controlled_genres(rows, reference_path=None):
+    references = genre_reference_rows(reference_path)
+    for row in rows:
+        reference = references.get(normalized_key(title_for(row)), {})
+        genre = str(reference.get("genre") or "").strip()
+        if not genre:
+            continue
+        row["Genre"] = genre
+        row["genre_source_url"] = reference.get("genre_source_url", "")
+        source_urls = [part.strip() for part in str(row.get("source_urls") or "").split("|") if part.strip()]
+        genre_url = str(reference.get("genre_source_url") or "").strip()
+        if genre_url and genre_url not in source_urls:
+            source_urls.append(genre_url)
+        row["source_urls"] = " | ".join(source_urls)
+    return rows
+
+
 def money(value):
     try:
         number = float(str(value or "0").replace(",", "").replace("$", ""))
@@ -181,7 +215,7 @@ GAME_KEY_DETAIL_OVERRIDES = {
 
 
 def meeting_date_from_schedule(schedule):
-    meeting = parse_date(schedule.get("upcoming_meeting_date", ""))
+    meeting = parse_date(schedule.get("last_completed_meeting_date", ""))
     return meeting.isoformat() if meeting else ""
 
 
@@ -242,6 +276,19 @@ def release_or_first_signal_inside_report_period(row, release_date):
     return release_inside_report_period(row, release_date)
 
 
+def report_release_date(row, enriched):
+    mobile_release = enriched.get("release_date_used") or row.get("sg_release_date_reference") or ""
+    pc_release = row.get("pc_release_date") or ""
+    if row.get("report_classification") == "mobile_led_cross_platform" and pc_release:
+        start = parse_date(row.get("report_start_date", ""))
+        end = parse_date(row.get("report_end_date", ""))
+        pc_date = parse_date(pc_release)
+        mobile_date = parse_date(mobile_release)
+        if start and end and pc_date and start <= pc_date <= end and (not mobile_date or not start <= mobile_date <= end):
+            return pc_release
+    return mobile_release or pc_release
+
+
 def game_title(row):
     return row.get("english_report_name") or row.get("unified_name") or row.get("pc_title") or row.get("report_name") or "Untitled"
 
@@ -259,9 +306,9 @@ def game_layer_platform(row, enriched=None):
 
 def report_classification_label(row):
     labels = {
-        "mobile_only": "Mobile game",
-        "mobile_led_cross_platform": "Mobile-led game with PC version",
-        "pc_only": "PC-only game",
+        "mobile_only": "Mobile",
+        "mobile_led_cross_platform": "Mobile + PC/Console",
+        "pc_only": "PC",
     }
     return labels.get(row.get("report_classification"), "Mobile game")
 
@@ -339,12 +386,7 @@ def game_layer_report_rows(meeting_date):
     for row in game_rows:
         title = game_title(row)
         enriched = enriched_by_title.get(normalized_key(title), {})
-        release_date = (
-            enriched.get("release_date_used")
-            or row.get("sg_release_date_reference")
-            or row.get("pc_release_date")
-            or ""
-        )
+        release_date = report_release_date(row, enriched)
         if not release_or_first_signal_inside_report_period(row, release_date):
             continue
         publisher = enriched.get("publisher") or row.get("unified_publisher_name") or "Publisher unavailable"
@@ -383,8 +425,14 @@ def game_layer_report_rows(meeting_date):
                 "steamdb_peak": row.get("steamdb_peak", ""),
                 "steamdb_reviews": row.get("steamdb_reviews", ""),
                 "steam_url": row.get("steam_url", ""),
+                "mobile_storefront_url": enriched.get("mobile_storefront_url", ""),
                 "release_date_source_url": enriched.get("release_date_source_url", ""),
                 "source_urls": enriched.get("source_urls", ""),
+                "publisher_source_url": enriched.get("publisher_source_url", ""),
+                "genre_source_url": enriched.get("genre_source_url", ""),
+                "comparable_game": enriched.get("comparable_game", ""),
+                "comparison_reason": enriched.get("comparison_reason", ""),
+                "comparison_source_url": enriched.get("comparison_source_url", ""),
                 "Continuity Note": enriched.get("continuity_note") or row.get("continuity_note", ""),
                 "Continuity Brief Href": enriched.get("continuity_brief_href") or row.get("continuity_brief_href", ""),
                 "Continuity": continuity_table_text(enriched.get("continuity_note") or row.get("continuity_note", "")),
@@ -451,6 +499,75 @@ def value_chips(value):
     if not parts:
         return '<span class="muted-value">N/A</span>'
     return '<div class="chip-list">' + "".join(f'<span class="metric-badge neutral">{escape(part)}</span>' for part in parts) + "</div>"
+
+
+def console_source_url(row):
+    explicit = str(row.get("Console Source URL") or row.get("console_source_url") or "").strip()
+    if explicit:
+        return explicit
+    mapped = CONSOLE_SOURCE_BY_TITLE.get(normalized_key(title_for(row)))
+    return mapped
+
+
+def platform_chips_for_row(row, value=None):
+    raw = value if value is not None else row.get("Platform") or row.get("platforms_confirmed") or ""
+    classification = row.get("report_classification") or ""
+    category = report_classification_label(row) if classification in {"mobile_only", "mobile_led_cross_platform", "pc_only"} else ""
+    labels = [category] if category else []
+    source = console_source_url(row)
+    if source:
+        labels.append("Console")
+    if not labels:
+        labels = split_values(raw)
+    chips = []
+    for label in dict.fromkeys(labels):
+        if label == "Console" and source:
+            chips.append(f'<a class="metric-badge platform-tag console-tag" href="{escape(source)}" target="_blank" rel="noopener" title="Console availability source">Console</a>')
+        else:
+            chips.append(f'<span class="metric-badge neutral">{escape(label)}</span>')
+    return '<div class="chip-list">' + "".join(chips) + '</div>' if chips else '<span class="muted-value">N/A</span>'
+
+
+def console_chip_for_row(row):
+    source = console_source_url(row)
+    if not source:
+        return ""
+    return f'<div class="chip-list"><a class="metric-badge platform-tag console-tag" href="{escape(source)}" target="_blank" rel="noopener" title="Console availability source">Console</a></div>'
+
+
+def normalize_tracker_platform(value):
+    text = str(value or "").lower()
+    if "pc" in text or "steam" in text or "windows" in text:
+        pc = True
+    else:
+        pc = False
+    console = any(token in text for token in ("playstation", "xbox", "nintendo", "switch", "console"))
+    ios = any(token in text for token in ("ios", "iphone", "ipad", "apple"))
+    android = "android" in text or "google play" in text
+    if "mobile" in text and not (ios or android):
+        ios = android = True
+    labels = []
+    if ios:
+        labels.append("iOS")
+    if android:
+        labels.append("Android")
+    if console:
+        labels.append("Console")
+    if pc:
+        labels.append("PC")
+    return ", ".join(labels) or str(value or "")
+
+
+def normalized_tracker_platform_for_row(row):
+    classification = row.get("report_classification") or ""
+    if classification in {"mobile_only", "mobile_led_cross_platform", "pc_only"}:
+        labels = [report_classification_label(row)]
+    else:
+        value = row.get("Platform") or row.get("platforms_confirmed") or ""
+        labels = [part for part in normalize_tracker_platform(value).split(", ") if part]
+    if console_source_url(row):
+        labels.append("Console")
+    return ", ".join(dict.fromkeys(labels))
 
 
 def performance_block(row):
@@ -679,7 +796,7 @@ def in_progress_period(schedule):
     start = schedule.get("last_completed_meeting_date", "")
     meeting = parse_date(schedule.get("upcoming_meeting_date", ""))
     end = (meeting - timedelta(days=1)).isoformat() if meeting else ""
-    return display_date(start), display_date(end)
+    return compact_date(start), compact_date(end, include_year=True)
 
 
 def schedule_report_dates(schedule):
@@ -750,6 +867,7 @@ def title_for(row):
 
 
 GENRE_INVALID_VALUES = {"", "game", "games", "n/a", "na", "unconfirmed", "genre unavailable"}
+CONTROLLED_GENRE_TAGS = {"Action", "Action RPG", "Adventure", "Anime RPG", "Arcade", "Bullet Hell", "Card RPG", "Creature Collection", "Endless Runner", "Farming Sim", "Idle RPG", "JRPG", "Life Sim", "MMORPG", "Music/Rhythm", "Open World", "Otome", "Puzzle", "Resource Management", "Roguelite", "RPG", "Shooter", "Simulation", "Strategy", "Survival", "Tactical RPG", "Tower Defense", "Turn-Based Strategy", "Visual Novel"}
 
 
 def genre_reference_rows(path=None):
@@ -770,6 +888,12 @@ def genre_validation_failures(rows, reference_path=None):
         problems = []
         if genre.lower() in GENRE_INVALID_VALUES:
             problems.append("missing or generic genre")
+        genre_tags = [tag.strip() for tag in re.split(r"\s*(?:\|\||;)\s*", genre) if tag.strip()]
+        invalid_tags = [tag for tag in genre_tags if tag not in CONTROLLED_GENRE_TAGS]
+        if invalid_tags:
+            problems.append("uncontrolled genre tag(s): " + ", ".join(invalid_tags))
+        if len(genre_tags) > 3:
+            problems.append("more than three genre tags")
         if not source_url:
             problems.append("missing genre_source_url")
         if problems:
@@ -804,6 +928,7 @@ def page_shell(title, active, body, rows, schedule, metadata):
         for href, label, desc, key in NAV_ITEMS
     )
     sea_tabs = sea_country_tabs_nav() if active == "latest" else ""
+    section_nav = section_bookmarks("sea6", "SEA6", "global-section-nav") if active == "latest" else ""
     compact_start = compact_date(start)
     compact_end = compact_date(end, include_year=True)
     compact_meeting = compact_date(meeting, include_year=True)
@@ -821,6 +946,7 @@ def page_shell(title, active, body, rows, schedule, metadata):
 <body class="dashboard-page page-{escape(active)}">
   <div class="app-shell top-nav-shell">
     <header class="site-header">
+      {section_nav}
       <div class="brand top-brand">
         <h1>IBD Market Intelligence</h1>
         <p>SEA6 &middot; Mobile Launch Discovery</p>
@@ -833,7 +959,7 @@ def page_shell(title, active, body, rows, schedule, metadata):
       <header class="topbar compact-topbar slim-context-bar" aria-label="Brief context">
         <div class="inline-context">
           <b title="{escape(full_context)}">Latest Brief</b>
-          <span title="Period: {escape(display_date(start))} to {escape(display_date(end))}">Period: {escape(compact_start or "N/A")} to {escape(compact_end or "N/A")}</span>
+          <span title="Period: {escape(display_date(start))} to {escape(display_date(end))}">{escape(compact_start or "N/A")} to {escape(compact_end or "N/A")}</span>
           <span title="Meeting: {escape(display_date(meeting))}">Meeting: {escape(compact_meeting or "N/A")}</span>
           <span title="Data as of: {escape(display_date(data_as_of(metadata, rows)))}">Data as of: {escape(compact_data_as_of or "N/A")}</span>
         </div>
@@ -954,6 +1080,50 @@ def sea_game_detail(row, report_rows):
     return publisher, genre, platforms, summary
 
 
+def comparable_html(report_row):
+    game = str(report_row.get("comparable_game") or "").strip()
+    reason = str(report_row.get("comparison_reason") or "").strip()
+    if not game or not reason:
+        return ""
+    return f'<div class="comparison-block"><b>Comparable to</b><p>{escape(game)}</p><small>{escape(reason)} Reader reference only; not an affiliation or equivalence claim.</small></div>'
+
+
+def game_source_url(row):
+    candidates = []
+    explicit_mobile = str(row.get("mobile_storefront_url") or "").strip()
+    if explicit_mobile:
+        candidates.append(explicit_mobile)
+    for key in ("source_urls", "steam_url", "release_date_source_url", "publisher_source_url", "genre_source_url"):
+        candidates.extend(value.strip() for value in str(row.get(key) or "").split("|") if value.strip())
+    for key in ("unified_app_id", "mobile_app_ids"):
+        for value in str(row.get(key) or "").split(";"):
+            value = value.strip()
+            if value.startswith("com.") or value.startswith("android."):
+                candidates.append(f"https://play.google.com/store/apps/details?id={value}")
+    candidates = list(dict.fromkeys(candidates))
+    classification = row.get("report_classification") or ""
+    mobile_store = lambda value: "apps.apple.com/" in value or "play.google.com/" in value
+    steam_store = lambda value: "store.steampowered.com/" in value
+    if classification in {"mobile_only", "mobile_led_cross_platform"}:
+        preferred = next((value for value in candidates if mobile_store(value)), "")
+        if preferred:
+            return preferred
+        if classification == "mobile_led_cross_platform":
+            preferred = next((value for value in candidates if steam_store(value)), "")
+            if preferred:
+                return preferred
+    elif classification == "pc_only":
+        preferred = next((value for value in candidates if steam_store(value)), "")
+        if preferred:
+            return preferred
+    return ""
+
+
+def game_title_html(title, row):
+    source = game_source_url(row)
+    return f'<a href="{escape(source)}" target="_blank" rel="noopener">{escape(title)}</a>' if source else escape(title)
+
+
 def top_sea_revenue_markets(row, limit=None):
     """Return all unique SEA6 markets with positive, valid revenue, highest first."""
     markets = []
@@ -1026,32 +1196,37 @@ def sea_regional_mobile_card(row, report_rows):
     title = row.get("game_title") or row.get("original_title") or "Untitled"
     original = row.get("original_title") or ""
     original_html = f'<p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
-    classification = "Mobile + PC" if report_row.get("report_classification") == "mobile_led_cross_platform" else "Mobile-only"
+    classification = "Mobile + PC/Console" if report_row.get("report_classification") == "mobile_led_cross_platform" else "Mobile"
     genre_html = f'<span class="genre-tag">{escape(genre)}</span>' if genre else ""
+    continuity = str(report_row.get("Continuity Note") or "").strip()
+    continuity_html = f'<div class="continuity-note"><b>Continuity</b><p>{escape(continuity)}</p></div>' if continuity else ""
     return f'''<article class="sea-country-card">
-  <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(classification)}</span></div>
+  <div class="sea-country-card-heading"><h3>{game_title_html(title, report_row)}</h3><span class="metric-badge neutral">{escape(classification)}</span></div>
 {original_html}
   <div class="sea-company-stack"><p class="sea-company-meta"><b>Publisher</b><span>{escape(publisher)}</span></p></div>
   <div class="meta-chip-row">{genre_html}</div>
   <div class="sea-country-stats"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(row.get("sea_st_gross_revenue")))}</b></span><span><small>SEA6 ST Downloads</small><b>{escape(number(row.get("sea_st_downloads")))}</b></span></div>
   <p class="sea-game-summary">{escape(summary)}</p>
+  {continuity_html}
+  {comparable_html(report_row)}
   {top_sea_revenue_markets_html(row)}
-  <div class="meta-chip-row"><span class="metric-badge neutral">{escape(platforms)}</span></div>
+  {console_chip_for_row(report_row)}
 {steam_context_html(report_row)}
 </article>'''
 
 
-def section_bookmarks(prefix, label):
+def section_bookmarks(prefix, label, nav_id=""):
     items = [
         (f"{prefix}-market-snapshot", "Market Snapshot"),
-        (f"{prefix}-mobile-pc-games", "Mobile + PC Games"),
+        (f"{prefix}-mobile-pc-games", "Mobile + PC/Console Games"),
         (f"{prefix}-mobile-only-games", "Mobile-only Games"),
-        (f"{prefix}-pc-only-games", "PC-only Games"),
-        (f"{prefix}-industry-trends", "Industry Trends"),
+        (f"{prefix}-pc-only-games", "PC/Console-only Games"),
         (f"{prefix}-game-announcements", "Game Announcements"),
+        (f"{prefix}-industry-trends", "Industry Trends"),
     ]
     links = "".join(f'<a href="#{escape(anchor)}">{escape(text)}</a>' for anchor, text in items)
-    return f'<aside class="on-page-nav" data-bookmark-scope="{escape(prefix)}"><button type="button" class="on-page-toggle" aria-expanded="false" aria-controls="{escape(prefix)}-on-page-links"><span aria-hidden="true">☰</span><span>On this page</span></button><nav id="{escape(prefix)}-on-page-links" class="on-page-links" aria-label="{escape(label)} sections">{links}</nav></aside>'
+    element_id = f' id="{escape(nav_id)}"' if nav_id else ""
+    return f'<aside class="on-page-nav"{element_id} data-bookmark-scope="{escape(prefix)}"><button type="button" class="on-page-toggle" aria-expanded="false" aria-controls="{escape(prefix)}-on-page-links"><span aria-hidden="true">☰</span><span>Sections</span></button><nav id="{escape(prefix)}-on-page-links" class="on-page-links" aria-label="{escape(label)} sections">{links}</nav></aside>'
 
 
 def news_key_details(row):
@@ -1088,15 +1263,13 @@ def regional_pc_signals(report_rows, anchor_id="sea6-pc-only-games"):
     cards = []
     for row in rows:
         title = title_for(row)
-        url = str(row.get("steam_url") or "").strip()
-        url_html = f'<a href="{escape(url)}" rel="noopener" target="_blank">Steam URL</a>' if url else "Steam URL N/A"
         rating = steam_rating_percent(row)
         rating_html = f'<div class="pc-stat"><small>Rating</small><b>{escape(rating)}%</b></div>' if rating else ""
         cards.append(
-            f'<article class="regional-pc-card"><div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">PC-only</span></div><div class="pc-release-meta"><small>Release date</small><b>{escape(display_date(row.get("Release Date")) or row.get("Release Date") or "N/A")}</b></div><div class="pc-stat-grid"><div class="pc-stat"><small>Steam peak</small><b>{escape(number(row.get("steamdb_peak")))}</b></div><div class="pc-stat"><small>Reviews</small><b>{escape(number(row.get("steamdb_reviews")))}</b></div>{rating_html}</div><p class="sea-game-summary">{escape(row.get("Inclusion Reason") or row.get("Key Details") or "Included by the SteamDB PC rule.")}</p><p class="sea-company-meta">{url_html}</p></article>'
+            f'<article class="regional-pc-card"><div class="sea-country-card-heading"><h3>{game_title_html(title, row)}</h3></div><div class="meta-chip-row">{platform_chips_for_row(row, row.get("Platform") or "PC")}</div><div class="sea-company-stack"><p class="sea-company-meta"><b>Publisher</b><span>{escape(row.get("Publisher") or "Publisher unavailable")}</span></p></div><div class="pc-release-meta"><small>Release date</small><b>{escape(display_date(row.get("Release Date")) or row.get("Release Date") or "N/A")}</b></div><div class="pc-stat-grid"><div class="pc-stat"><small>Steam peak</small><b>{escape(number(row.get("steamdb_peak")))}</b></div><div class="pc-stat"><small>Reviews</small><b>{escape(number(row.get("steamdb_reviews")))}</b></div>{rating_html}</div><p class="sea-game-summary">{escape(row.get("Inclusion Reason") or row.get("Key Details") or "Included by the SteamDB PC rule.")}</p>{comparable_html(row)}</article>'
         )
     content = "".join(cards) or empty_state("No PC-only games qualified in this brief", "SteamDB provided no qualifying PC-only release evidence for this period.")
-    return f'<section class="regional-pc-signals" id="{escape(anchor_id)}"><h3 class="signal-heading">PC-only Games</h3><p class="section-description">SteamDB provides global PC release evidence. Country-level revenue is not available.</p><div class="sea-country-grid">{content}</div></section>'
+    return f'<section class="regional-pc-signals platform-group platform-group-pc-only" id="{escape(anchor_id)}"><h3 class="signal-heading"><span class="platform-group-badge">PC/Console-only Games</span></h3><p class="section-description">SteamDB provides global PC release evidence. Country-level revenue is not available.</p><div class="sea-country-grid">{content}</div></section>'
 
 
 def sea_country_release_groups(country_rows, country, report_rows):
@@ -1110,7 +1283,7 @@ def sea_country_release_groups(country_rows, country, report_rows):
             mobile_only.append(row)
     groups = [
         (
-            "Mobile + PC Games",
+            "Mobile + PC/Console Games",
             "Mobile games in this country that also have a matched PC version.",
             mobile_pc,
             "No mobile + PC games qualified in this country.",
@@ -1128,8 +1301,10 @@ def sea_country_release_groups(country_rows, country, report_rows):
             heading,
             empty_desc,
         )
+        slug = "mobile-pc-games" if heading.startswith("Mobile +") else "mobile-only-games"
+        group_class = "platform-group-mobile-pc" if slug == "mobile-pc-games" else "platform-group-mobile-only"
         sections.append(
-            f'<section class="country-game-group" id="{country.lower()}-{heading.lower().replace(" + ", "-").replace(" ", "-")}"><h3 class="signal-heading">{escape(heading)} <span>{escape(desc)}</span></h3><div class="sea-country-grid">{cards}</div></section>'
+            f'<section class="country-game-group platform-group {group_class}" id="{country.lower()}-{slug}"><h3 class="signal-heading"><span class="platform-group-badge">{escape(heading)}</span><span>{escape(desc)}</span></h3><div class="sea-country-grid">{cards}</div></section>'
         )
     return "".join(sections)
 
@@ -1142,21 +1317,25 @@ def sea_country_card(row, country, report_rows):
     title = row.get("game_title") or original or "Untitled"
     original_html = f'<p class="original-title"><span>Original title</span>{escape(original)}</p>' if original and original != title else ""
     note = sea_country_note(row, country)
-    classification_label = "Mobile + PC" if report_row.get("report_classification") == "mobile_led_cross_platform" else "Mobile game"
+    classification_label = report_classification_label(report_row)
     genre_html = f'<span class="genre-tag">{escape(genre)}</span>' if genre else ""
+    continuity = str(report_row.get("Continuity Note") or "").strip()
+    continuity_html = f'<div class="continuity-note"><b>Continuity</b><p>{escape(continuity)}</p></div>' if continuity else ""
     release_label, release_date = mobile_release_display(row, report_row, country)
     rank_html = "".join(
         f'<span class="metric-badge neutral">{label} #{escape(str(row.get(field) or "N/A"))}</span>'
         for label, field in (("iOS", f"{prefix}_ios_rank"), ("Android", f"{prefix}_android_rank"))
     )
     return f'''<article class="sea-country-card">
-  <div class="sea-country-card-heading"><h3>{escape(title)}</h3><span class="metric-badge neutral">{escape(classification_label)}</span></div>
+  <div class="sea-country-card-heading"><h3>{game_title_html(title, report_row)}</h3><span class="metric-badge neutral">{escape(classification_label)}</span></div>
 {original_html}
   <div class="sea-company-stack"><p class="sea-company-meta"><b>Publisher</b><span>{escape(publisher)}</span></p></div>
   <div class="meta-chip-row">{genre_html}</div>
   <div class="sea-country-stats"><span><small>ST Gross Revenue</small><b>{escape(money(row.get(f"{prefix}_revenue_gross")))}</b></span><span><small>ST Downloads</small><b>{escape(number(row.get(f"{prefix}_downloads")))}</b></span></div>
   {f'<p class="country-release-date"><b>{escape(release_label)}</b> {escape(display_date(release_date) or release_date)}</p>' if release_date else ''}
   <p class="sea-game-summary">{escape(summary)}</p>
+  {continuity_html}
+  {comparable_html(report_row)}
   {top_sea_revenue_markets_html(row)}
   <div class="meta-chip-row">{rank_html}</div>
 {steam_context_html(report_row)}
@@ -1172,7 +1351,7 @@ RANK_LIMITATION_NOTE = (
 
 def sea_country_tabs_nav():
     country_names = {"SG": "Singapore", "MY": "Malaysia", "PH": "Philippines", "ID": "Indonesia", "TH": "Thailand", "VN": "Vietnam"}
-    tabs = ['<a class="sea-tab active" href="#sea6-summary" data-sea-target="sea6-summary-panel" aria-selected="true">SEA6 Summary</a>']
+    tabs = ['<a class="sea-tab active" href="#sea6-summary" data-sea-target="sea6-summary-panel" aria-selected="true">SEA6</a>']
     tabs.extend(
         f'<a class="sea-tab" href="#sea-{country.lower()}" data-sea-target="sea-{country.lower()}" aria-selected="false">{name}</a>'
         for country, name in country_names.items()
@@ -1234,11 +1413,28 @@ def sea_regional_section(sea_games, report_rows, news_context=None):
             anchor_prefix=f"{prefix}",
         ) if news_context else ""
         panels.append(
-            f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden>{section_bookmarks(prefix, name)}<div class="section-heading"><div><h2>{name}</h2><p>Country view using {name} Sensor Tower evidence only.</p></div></div><section id="{prefix}-market-snapshot"><h3 class="country-section-label">Market Snapshot</h3><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><p class="rank-limitation-note">{escape(RANK_LIMITATION_NOTE)}</p></section>{grouped_cards}{regional_pc_signals(report_rows, f"{prefix}-pc-only-games")}{country_news}</section>'
+            f'<section class="sea-view-panel sea-country-panel" id="sea-{prefix}" hidden><div class="section-heading"><div><h2>{name}</h2><p>Country view using {name} Sensor Tower evidence only.</p></div></div><section id="{prefix}-market-snapshot"><h3 class="country-section-label">Market Snapshot</h3><div class="sea-summary-strip"><span><small>ST Gross Revenue</small><b>{escape(money(country_summary["sea_st_gross_revenue"]))}</b></span><span><small>ST Downloads</small><b>{escape(number(country_summary["sea_st_downloads"]))}</b></span><span><small>Included new games</small><b>{country_summary["game_count"]}</b></span></div><p class="rank-limitation-note">{escape(RANK_LIMITATION_NOTE)}</p></section>{grouped_cards}{regional_pc_signals(report_rows, f"{prefix}-pc-only-games")}{country_news}</section>'
         )
     regional_news = news_context_section(regional_news_rows(news_context or []), heading="SEA6-related Articles", regional=True, anchor_prefix="sea6") if news_context else ""
+    regional_mobile_rows = list(included)
+    included_keys = {normalized_key(row.get("game_title") or row.get("original_title")) for row in regional_mobile_rows}
+    for report_row in report_rows:
+        if report_row.get("report_classification") != "mobile_led_cross_platform":
+            continue
+        key = normalized_key(title_for(report_row))
+        if not key or key in included_keys:
+            continue
+        regional_mobile_rows.append({
+            "game_title": title_for(report_row),
+            "original_title": report_row.get("Original Title") or title_for(report_row),
+            "publisher": report_row.get("Publisher") or "Publisher unavailable",
+            "genre": report_row.get("Genre") or "",
+            "platforms": report_row.get("Platform") or "iOS, Android, Steam",
+            "sea_st_gross_revenue": "",
+            "sea_st_downloads": "",
+        })
     regional_mobile_rows = sorted(
-        included,
+        regional_mobile_rows,
         key=lambda row: (-safe_float(row.get("sea_st_gross_revenue")), str(row.get("game_title") or "").lower()),
     )
     regional_mobile_pc = []
@@ -1250,17 +1446,18 @@ def sea_regional_section(sea_games, report_rows, news_context=None):
             regional_mobile_only.append(row)
     regional_groups = []
     for heading, desc, group_rows, empty_desc in (
-        ("Mobile + PC Games", "Mobile games with a matched PC version, ranked by combined SEA6 ST Gross Revenue.", regional_mobile_pc, "No Mobile + PC games qualified in SEA6."),
+        ("Mobile + PC/Console Games", "Mobile games with a matched PC version, ranked by combined SEA6 ST Gross Revenue.", regional_mobile_pc, "No Mobile + PC/Console games qualified in SEA6."),
         ("Mobile-only Games", "Mobile games without a matched PC version, ranked by combined SEA6 ST Gross Revenue.", regional_mobile_only, "No Mobile-only games qualified in SEA6."),
     ):
         cards = "".join(sea_regional_mobile_card(row, report_rows) for row in group_rows) or empty_state(heading, empty_desc)
-        anchor = "sea6-mobile-pc-games" if heading == "Mobile + PC Games" else "sea6-mobile-only-games"
-        regional_groups.append(f'<section class="country-game-group" id="{anchor}"><h3 class="signal-heading">{escape(heading)} <span>{escape(desc)}</span></h3><div class="sea-country-grid">{cards}</div></section>')
+        anchor = "sea6-mobile-pc-games" if heading == "Mobile + PC/Console Games" else "sea6-mobile-only-games"
+        group_class = "platform-group-mobile-pc" if heading.startswith("Mobile +") else "platform-group-mobile-only"
+        regional_groups.append(f'<section class="country-game-group platform-group {group_class}" id="{anchor}"><h3 class="signal-heading"><span class="platform-group-badge">{escape(heading)}</span><span>{escape(desc)}</span></h3><div class="sea-country-grid">{cards}</div></section>')
     regional_mobile_sections = "".join(regional_groups)
     optional_regional_sections = "\n  ".join(section for section in (regional_mobile_sections, pc_signals, regional_news) if section)
     optional_regional_html = f"\n  {optional_regional_sections}" if optional_regional_sections else ""
     return f'''<section class="brief-section sea-regional-section">
-  <div class="sea-view-panel sea-summary-panel active" id="sea6-summary-panel">{section_bookmarks("sea6", "SEA6")}
+  <div class="sea-view-panel sea-summary-panel active" id="sea6-summary-panel">
   <div class="section-heading"><div><h2 id="sea6-summary">SEA6 Summary</h2><p>Regional view of included new mobile games across Singapore, Malaysia, Philippines, Indonesia, Thailand, and Vietnam.</p></div></div>
   <section id="sea6-market-snapshot"><h3 class="country-section-label">Market Snapshot</h3><div class="sea-summary-strip"><span><small>SEA6 ST Gross Revenue</small><b>{escape(money(summary["sea_st_gross_revenue"]))}</b><em>Included new games only</em></span><span><small>SEA6 ST Downloads</small><b>{escape(number(summary["sea_st_downloads"]))}</b><em>Included new games only</em></span><span><small>Included new mobile games</small><b>{summary["game_count"]}</b></span><span><small>Top revenue country</small><b>{escape(summary["top_country_by_revenue"])}</b></span><span><small>Top download country</small><b>{escape(summary["top_country_by_downloads"])}</b></span></div></section>
   {optional_regional_html}
@@ -1333,12 +1530,11 @@ def signal_card(row, group):
     performance_heading = "PC Performance" if row.get("report_classification") == "pc_only" else "Local Performance"
     return f"""<article class="signal-card {card_class}">
   <div class="card-overview">
-    <h3>{escape(title)}</h3>
+    <h3>{game_title_html(title, row)}</h3>
     <div class="company-stack"><p class="publisher-line"><small>Publisher</small><span>{escape(row.get("Publisher") or "Publisher unavailable")}</span></p></div>
     <div class="meta-chip-row">
-      {value_chips(row.get("Platform") or "Platform unavailable")}
+      {platform_chips_for_row(row, row.get("Platform") or "Platform unavailable")}
       {value_chips(row.get("Genre") or "")}
-      <span class="metric-badge neutral">{escape(report_classification_label(row))}</span>
       <span class="metric-badge neutral">Release {escape(display_date(row.get("Release Date")) or row.get("Release Date") or "N/A")}</span>
     </div>{title_note}
   </div>
@@ -1349,6 +1545,7 @@ def signal_card(row, group):
   <div class="card-block card-evidence">
     <h4>Key Details</h4>
     <p>{escape(details)}</p>
+    {comparable_html(row)}
 {continuity_html}
   </div>
 </article>"""
@@ -1412,14 +1609,16 @@ def tracker_table(rows):
 
 
 def tracker_sort_attributes(row):
+    platform_value = normalized_tracker_platform_for_row(row)
     values = {
         "date": row.get("Release Date") or row.get("meeting_date") or "",
         "revenue": safe_float(row.get("SG Gross Revenue")),
         "downloads": safe_float(row.get("SG Downloads")),
         "country": row.get("Country") or row.get("countries_detected") or "",
         "title": title_for(row),
-        "platform": row.get("Platform") or "",
+        "platform": platform_value,
         "publisher": row.get("Publisher") or "",
+        "genre": row.get("Genre") or "",
         "year": str(row.get("meeting_date") or row.get("report_end_date") or "")[:4],
         "month": str(row.get("meeting_date") or row.get("report_end_date") or "")[5:7],
     }
@@ -1441,7 +1640,9 @@ def table_cell(row, field):
         return f'<td class="num">{escape(number(value))}</td>'
     if field == "Publisher":
         return f'<td><span class="company-meta">{escape(str(value or ""))}</span></td>'
-    if field in ("Platform", "Genre"):
+    if field == "Platform":
+        return f"<td>{platform_chips_for_row(row, value or row.get('platforms_confirmed') or ('PC' if row.get('report_classification') == 'pc_only' else 'iOS, Android'))}</td>"
+    if field == "Genre":
         return f"<td>{value_chips(value)}</td>"
     if field == "Top 3 Markets":
         return f"<td>{top_markets_block(value)}</td>"
@@ -1482,13 +1683,13 @@ def released_games_section(strong, emerging, view):
 </div>"""
     rows = strong + emerging
     groups = [
-        ("mobile_only", "Mobile Games", "Mobile game", "No mobile-only games were released in this reporting period."),
-        ("mobile_led_cross_platform", "Mobile + PC Games", "Mobile-led game with PC version", "No mobile-led cross-platform games were released in this reporting period."),
-        ("pc_only", "PC-only Games", "PC-only game", "No PC-only games were released in this reporting period."),
+        ("mobile_led_cross_platform", "Mobile + PC/Console Games", "Mobile-led game with PC version", "No mobile-led cross-platform games were released in this reporting period.", "platform-group-mobile-pc"),
+        ("mobile_only", "Mobile-only Games", "Mobile-only game", "No mobile-only games were released in this reporting period.", "platform-group-mobile-only"),
+        ("pc_only", "PC/Console-only Games", "PC/Console-only game", "No PC/Console-only games were released in this reporting period.", "platform-group-pc-only"),
     ]
     card_sections = []
     table_sections = []
-    for classification, heading, label, empty_desc in groups:
+    for classification, heading, label, empty_desc, group_class in groups:
         group_rows = sorted(
             [
                 row for row in rows
@@ -1498,9 +1699,10 @@ def released_games_section(strong, emerging, view):
             key=lambda row: (0 if signal_group(row) == "strong" else 1, title_for(row).lower()),
         )
         cards = "".join(signal_card(row, signal_group(row)) for row in group_rows) or empty_state(f"No {heading.lower()} in this brief", empty_desc)
-        card_sections.append(f'<section class="release-group"><h3 class="signal-heading">{heading} <span>{label}</span></h3><div class="signal-grid">{cards}</div></section>')
+        anchor = {"mobile_led_cross_platform": "sea6-mobile-pc-games", "mobile_only": "sea6-mobile-only-games", "pc_only": "sea6-pc-only-games"}[classification]
+        card_sections.append(f'<section id="{anchor}" class="release-group platform-group {group_class}"><h3 class="signal-heading"><span class="platform-group-badge">{heading}</span><span>{label}</span></h3><div class="signal-grid">{cards}</div></section>')
         table_content = report_table(group_rows, released=True) if group_rows else empty_state(f"No {heading.lower()} in this brief", empty_desc)
-        table_sections.append(f'<section class="release-group"><h3 class="signal-heading">{heading} <span>{label}</span></h3>{table_content}</section>')
+        table_sections.append(f'<section class="release-group platform-group {group_class}"><h3 class="signal-heading"><span class="platform-group-badge">{heading}</span><span>{label}</span></h3>{table_content}</section>')
     return f"""<section class="brief-section released-games-section">
   <div class="section-heading"><div><h2>Released Games</h2><p>Games released inside the report period, grouped by mobile and PC classification.</p></div>{toggle}</div>
   <div class="cards-view" data-view="cards">
@@ -1563,10 +1765,10 @@ def news_context_section(news_context, heading="SEA6-related Articles", regional
     scope = "SEA6-wide or multi-country signals affecting the regional gaming landscape." if regional else "News signals relevant to this country view."
     return f"""<section class="news-context-section country-news-context">
   <div class="section-heading"><div><h3>{escape(heading)}</h3><p>{scope}</p></div></div>
-  <section id="{escape(anchor_prefix)}-industry-trends"><h4 class="signal-heading">Industry Trends</h4><p class="section-description">News that influence or affect the gaming world.</p>
-  <div class="news-context-grid">{industry_cards}</div>
-  </section><section id="{escape(anchor_prefix)}-game-announcements"><h4 class="signal-heading">Game Announcements</h4><p class="section-description">Future Releases and/or Pre-Launch Affairs.</p>
+  <section id="{escape(anchor_prefix)}-game-announcements"><h4 class="signal-heading">Game Announcements</h4><p class="section-description">Future Releases and/or Pre-Launch Affairs.</p>
   <div class="news-context-grid">{announcement_cards}</div>
+  </section><section id="{escape(anchor_prefix)}-industry-trends"><h4 class="signal-heading">Industry Trends</h4><p class="section-description">News that influence or affect the gaming world.</p>
+  <div class="news-context-grid">{industry_cards}</div>
   </section>
 </section>"""
 
@@ -1616,7 +1818,7 @@ def proof_run_records():
             {
                 "folder": folder.name,
                 "href": f"proof-runs/{folder.name}/latest-brief.html",
-                "period": f"{start} to {end}" if start or end else "N/A",
+                "period": compact_period(start, end) if start or end else "N/A",
                 "meeting": meeting or "N/A",
                 "data_as_of": data_as_of(proof_metadata, proof_rows),
                 "row_count": len(proof_rows),
@@ -1641,8 +1843,8 @@ def proof_archive_cards(records):
         cards.append(
             f"""<article class="archive-card reading-card" data-archive-year="{escape(record["folder"][:4])}" data-archive-month="{escape(record["folder"][5:7])}">
   <div class="archive-main">
-    <span class="status-chip neutral">Proof run</span>
-    <h3>{escape(record["meeting"])} mock report</h3>
+    <span class="status-chip neutral">Completed</span>
+    <h3>{escape(display_date(record["meeting"]) or record["meeting"])}</h3>
     <p>Report period: {escape(record["period"])}</p>
   </div>
   <div class="archive-meta">
@@ -1674,7 +1876,7 @@ def tracker_rows_across_briefs(fallback_rows):
             if title_key:
                 seen_titles.add(title_key)
             tracker_row = dict(row)
-            label = f'{record["meeting"]} mock report'
+            label = display_date(record["meeting"]) or record["meeting"]
             tracker_row["Related Brief"] = f'{label} | {record["period"]}'
             tracker_row["_brief_label"] = label
             tracker_row["_brief_href"] = record["href"]
@@ -1694,8 +1896,8 @@ def historical_page(rows, schedule, metadata, weekly_summary=None):
     latest_callout = ""
     if latest_proof:
         latest_callout = (
-            f'<section class="latest-archive-callout"><div><span class="status-chip strong">Current latest brief</span>'
-            f'<h2>{escape(latest_proof["meeting"])} latest report</h2>'
+            f'<section class="latest-archive-callout"><div><span class="status-chip strong">Completed</span>'
+            f'<h2>{escape(display_date(latest_proof["meeting"]) or latest_proof["meeting"])}</h2>'
             f'<p>{escape(latest_proof["period"])} &middot; Data as of: {escape(latest_proof["data_as_of"])}</p></div>'
             f'<a class="btn primary" href="latest-brief.html">Open latest brief</a></section>'
         )
@@ -1714,14 +1916,22 @@ def tracker_page(rows, schedule, metadata):
     body = (
         page_header("Game Tracker", "Games mentioned across briefs", "A structured working view for games, publishers, status, and related brief evidence.")
         + """<section class="tracker-filters control-panel" aria-label="Game Tracker filters">
-  <label>Search <input id="trackerSearch" placeholder="Game, publisher, genre" aria-label="Search games"></label>
-  <label>Year <select id="trackerYear"><option value="all">All</option></select></label>
-  <label>Month <select id="trackerMonth"><option value="all">All</option><option value="01">January</option><option value="02">February</option><option value="03">March</option><option value="04">April</option><option value="05">May</option><option value="06">June</option><option value="07">July</option><option value="08">August</option><option value="09">September</option><option value="10">October</option><option value="11">November</option><option value="12">December</option></select></label>
-  <label>Sort <select id="trackerSort"><option value="date">Date</option><option value="revenue">Gross revenue</option><option value="downloads">Downloads</option><option value="country">Country</option><option value="title">Game title A-Z</option><option value="platform">Platform</option><option value="publisher">Publisher</option></select></label>
-  <label>Order <select id="trackerSortDirection"><option value="asc">Ascending</option><option value="desc">Descending</option></select></label>
-  <button type="button" id="clearTrackerFilters">Clear</button>
+  <div class="tracker-filter-row tracker-filter-row-primary">
+    <div class="tracker-search-field"><label for="trackerSearch">Search</label> <input id="trackerSearch" placeholder="Game, publisher, genre" aria-label="Search games" autocomplete="off" aria-autocomplete="list" aria-controls="trackerSuggestions"><div id="trackerSuggestions" class="tracker-suggestions" role="listbox" hidden></div></div>
+    <label>Year <select id="trackerYear"><option value="all">All</option></select></label>
+    <label>Month <select id="trackerMonth"><option value="all">All</option><option value="01">January</option><option value="02">February</option><option value="03">March</option><option value="04">April</option><option value="05">May</option><option value="06">June</option><option value="07">July</option><option value="08">August</option><option value="09">September</option><option value="10">October</option><option value="11">November</option><option value="12">December</option></select></label>
+    <button type="button" id="downloadTrackerCsv" class="btn secondary">Download CSV</button><button type="button" id="clearTrackerFilters">Clear</button>
+  </div>
+  <div class="tracker-filter-row tracker-sort-row" aria-label="Game Tracker sorting controls">
+    <label>Primary sort <select id="trackerPrimarySort"><option value="date">Date</option><option value="revenue">Gross revenue</option><option value="downloads">Downloads</option><option value="country">Country</option><option value="title">Game title</option><option value="platform">Platform</option><option value="publisher">Publisher</option><option value="genre">Genre</option></select></label>
+    <button type="button" id="trackerPrimaryDirection" class="tracker-order-toggle" data-direction="asc" title="Current order: A-Z / low-to-high. Activate to switch to Z-A / high-to-low." aria-label="Current order: A-Z / low-to-high">A-Z ↑</button>
+    <label>Secondary sort <select id="trackerSecondarySort"><option value="">None</option><option value="date">Date</option><option value="revenue">Gross revenue</option><option value="downloads">Downloads</option><option value="country">Country</option><option value="title">Game title</option><option value="platform">Platform</option><option value="publisher">Publisher</option><option value="genre">Genre</option></select></label>
+    <button type="button" id="trackerSecondaryDirection" class="tracker-order-toggle" data-direction="asc" title="Current order: A-Z / low-to-high. Activate to switch to Z-A / high-to-low." aria-label="Current order: A-Z / low-to-high">A-Z ↑</button>
+    <label>Tertiary sort <select id="trackerTertiarySort"><option value="">None</option><option value="date">Date</option><option value="revenue">Gross revenue</option><option value="downloads">Downloads</option><option value="country">Country</option><option value="title">Game title</option><option value="platform">Platform</option><option value="publisher">Publisher</option><option value="genre">Genre</option></select></label>
+    <button type="button" id="trackerTertiaryDirection" class="tracker-order-toggle" data-direction="asc" title="Current order: A-Z / low-to-high. Activate to switch to Z-A / high-to-low." aria-label="Current order: A-Z / low-to-high">A-Z ↑</button>
+  </div>
 </section>
-<div class="filter-chips"><span>Filters</span><a class="filter-chip" href="latest-brief.html"><span>Open</span>Latest brief</a></div>"""
+"""
         + tracker_table(tracker_rows)
     )
     return page_shell("Game Tracker", "tracker", body, rows, schedule, metadata)
@@ -1729,7 +1939,7 @@ def tracker_page(rows, schedule, metadata):
 
 def write_text(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_text("\n".join(line.rstrip() for line in str(text).splitlines()) + "\n", encoding="utf-8")
 
 
 def write_rows_csv(path, rows):
@@ -1786,7 +1996,7 @@ def write_assets():
 .news-context-card .news-why-matters b{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#7B8794}
 .news-context-card .news-why-matters span{font-style:italic}
 .section-description{margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.45}
-.on-page-nav{position:sticky;top:124px;z-index:20;float:right;width:42px;margin:0 0 8px 16px}
+.on-page-nav{position:static;z-index:20;width:auto;margin:0}
 .on-page-toggle{display:flex;align-items:center;gap:7px;width:42px;min-height:38px;padding:8px;border:1px solid #CFE8E1;border-radius:10px;background:#F3FBF8;color:#126B59;font:inherit;font-size:12px;font-weight:900;cursor:pointer;overflow:hidden;white-space:nowrap}
 .on-page-toggle span:last-child{display:none}
 .on-page-toggle:focus-visible,.on-page-links a:focus-visible{outline:3px solid #F3B34C;outline-offset:2px}
@@ -1875,7 +2085,7 @@ def write_assets():
 body.table-mode .cards-view{display:none}
 body.table-mode .table-view{display:block}
 @media(max-width:520px){.market-row{grid-template-columns:32px 34px 1fr}.market-row span:last-child{grid-column:3}.stat-grid{grid-template-columns:1fr}}
-@media(max-width:768px){.on-page-nav{position:relative;top:auto;float:none;width:100%;margin:0 0 12px}.on-page-toggle,.on-page-nav[aria-expanded="true"] .on-page-toggle{width:auto}.on-page-toggle span:last-child{display:inline}.on-page-nav[aria-expanded="true"]{width:100%}.on-page-links{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:768px){.on-page-nav{position:static;width:auto;margin:0}.on-page-toggle,.on-page-nav[aria-expanded="true"] .on-page-toggle{width:auto}.on-page-toggle span:last-child{display:inline}.on-page-nav[aria-expanded="true"]{width:100%}.on-page-links{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* Professional dashboard responsive pass */
 *{box-sizing:border-box}
@@ -2043,16 +2253,22 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 .fixed-secondary-row{min-height:54px!important;padding:5px clamp(12px,2vw,24px)!important}
 .fixed-secondary-inner{min-height:44px!important;gap:10px!important}
 .sea-tab{padding:5px 8px!important;min-height:28px!important}
-.on-page-nav{position:fixed!important;top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 12px)!important;left:12px!important;margin:0!important;width:38px!important;z-index:55!important}
+.fixed-secondary-inner>.on-page-nav{position:static!important;float:none!important;top:auto!important;left:auto!important;margin:0!important;width:auto!important;z-index:55!important;flex:0 0 auto!important}
 .on-page-toggle{width:38px!important;min-height:36px!important;padding:7px!important;box-shadow:0 3px 10px rgba(9,30,66,.10)}
-.on-page-nav[aria-expanded="true"]{width:190px!important;margin-right:8px!important}
-.on-page-nav[aria-expanded="true"] .on-page-toggle{width:190px!important}
+.fixed-secondary-inner>.on-page-nav[aria-expanded="true"]{width:190px!important;margin-right:8px!important;position:relative!important}
+.fixed-secondary-inner>.on-page-nav[aria-expanded="true"] .on-page-toggle{width:190px!important}
+.fixed-secondary-inner>.on-page-nav[aria-expanded="true"] .on-page-links{position:absolute;top:calc(100% + 6px);left:0;z-index:70;width:190px}
+.fixed-secondary-inner>.on-page-nav .on-page-toggle{width:auto!important;min-width:112px!important;box-shadow:none}
 .on-page-links a.is-current{background:#EAF1FF;color:var(--blue-900);font-weight:900;border-left:3px solid #126B59}
 .sea-company-stack{display:grid;gap:4px}
 .company-stack{display:grid;gap:4px}
 .company-stack .publisher-line{display:grid;grid-template-columns:72px minmax(0,1fr);gap:6px;align-items:baseline;margin:0!important}
 .company-stack .publisher-line small{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#73869B;font-weight:900}
 .company-stack .publisher-line span{color:var(--ink-2);font-size:13px}
+.sea-company-stack{gap:2px!important}.sea-company-meta{margin:0!important;line-height:1.2!important}
+.comparison-block{border-top:1px solid #E5ECF3;padding-top:7px;margin-top:2px}.comparison-block>b{display:block;color:var(--blue-900);font-size:11px;text-transform:uppercase;letter-spacing:.05em}.comparison-block p{margin:2px 0;font-size:13px;color:var(--ink-2)}.comparison-block small{display:block;color:var(--muted);font-size:11px;line-height:1.35}
+.tracker-row>td{vertical-align:top}.tracker-brief-cell{vertical-align:top!important;display:table-cell!important;padding-top:10px!important}.brief-icon-link{display:inline-flex!important;vertical-align:top;cursor:pointer;border:1px solid #D9A82E!important;border-radius:6px!important;box-shadow:0 1px 0 rgba(0,0,0,.08);background:#FFF8D9!important}.brief-icon-link:hover{background:#FFE99A!important;transform:none}.brief-icon-link:focus-visible{outline:3px solid #2F80ED;outline-offset:2px}.brief-period{display:inline-block;vertical-align:top;margin-left:6px;line-height:1.25}
+.tracker-filters{align-items:end}.tracker-filters label{min-width:126px}.tracker-filters select{max-width:170px}
 .sea-company-meta{display:grid!important;grid-template-columns:72px minmax(0,1fr);gap:6px;align-items:baseline}
 .sea-company-meta b{margin:0!important}
 .sea-country-stats{margin-top:2px}
@@ -2096,8 +2312,8 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
 .data-table th:first-child,.data-table td:first-child{position:sticky;left:0;z-index:2;background:#fff}
 @media(max-width:768px){
   :root{--dashboard-header-height:132px;--dashboard-secondary-height:104px}
-  .on-page-nav{position:fixed!important;top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 8px)!important;left:12px!important;width:42px!important;margin:0!important;z-index:55!important}
-  .on-page-nav[aria-expanded="true"]{width:100%!important;margin-right:0!important}
+  .fixed-secondary-inner>.on-page-nav{position:static!important;width:100%!important;margin:0!important;z-index:55!important}
+  .fixed-secondary-inner>.on-page-nav[aria-expanded="true"]{width:100%!important;margin-right:0!important}
   .on-page-toggle,.on-page-nav[aria-expanded="true"] .on-page-toggle{width:auto!important}
   .pc-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .archive-toolbar,.tracker-filters{align-items:stretch!important}
@@ -2106,7 +2322,22 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
   .data-table th:first-child,.data-table td:first-child{position:static}
 }
 """
+    css += r"""
+/* Final sticky header contract: one desktop row, deliberate mobile rows. */
+:root{--dashboard-header-height:52px;--dashboard-secondary-height:50px}
+.site-header{position:fixed!important;inset:0 0 auto!important;height:var(--dashboard-header-height)!important;min-height:var(--dashboard-header-height)!important;padding:0 clamp(16px,2vw,28px)!important;display:grid!important;grid-template-columns:auto auto minmax(0,1fr)!important;grid-template-rows:1fr!important;gap:16px!important;align-items:center!important;overflow:visible!important}
+.site-header>.on-page-nav{grid-column:1!important;grid-row:1!important;justify-self:start!important;position:relative!important;inset:auto!important;width:auto!important;margin:0!important;z-index:80!important}
+.site-header>.on-page-nav[aria-expanded="true"]{width:auto!important}
+.site-header>.on-page-nav .on-page-toggle,.site-header>.on-page-nav[aria-expanded="true"] .on-page-toggle{width:auto!important;min-width:112px!important;height:36px!important;min-height:36px!important;padding:7px 10px!important}
+.site-header>.on-page-nav[aria-expanded="true"] .on-page-links{position:absolute!important;top:calc(100% + 6px)!important;left:0!important;width:220px!important;max-height:min(60vh,360px)!important;overflow:auto!important;margin:0!important;z-index:100!important}
+.top-brand{grid-column:2!important;grid-row:1!important;justify-self:start!important;min-width:0!important;text-align:left!important;white-space:nowrap!important}.top-brand h1{font-size:16px!important;line-height:1.05!important;margin:0!important;white-space:nowrap!important}.top-brand p{font-size:11px!important;line-height:1.1!important;margin:2px 0 0!important;white-space:nowrap!important}
+.top-nav{grid-column:3!important;grid-row:1!important;justify-self:end!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:6px!important;min-width:0!important;max-width:100%!important;flex-wrap:nowrap!important;overflow:visible!important;padding:0!important;white-space:nowrap!important}.top-nav a{flex:0 0 auto!important;min-height:34px!important;height:34px!important;padding:7px 10px!important;font-size:12.5px!important;white-space:nowrap!important}
+.fixed-secondary-row{position:fixed!important;top:var(--dashboard-header-height)!important;left:0!important;right:0!important;height:var(--dashboard-secondary-height)!important;min-height:var(--dashboard-secondary-height)!important;padding:0 clamp(16px,2vw,28px)!important;z-index:50!important}.fixed-secondary-inner{height:100%!important;min-height:0!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:14px!important;overflow:hidden!important}.fixed-secondary-inner>.on-page-nav{display:none!important}.slim-context-bar,.compact-topbar{position:static!important;flex:1 1 auto!important;min-width:0!important;min-height:0!important;padding:0!important;overflow:hidden!important}.inline-context{display:flex!important;align-items:center!important;flex-wrap:nowrap!important;min-width:0!important;overflow:hidden!important;white-space:nowrap!important}.inline-context span{white-space:nowrap!important}.sea-country-tabs{position:static!important;flex:0 1 auto!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;flex-wrap:nowrap!important;min-width:0!important;overflow-x:auto!important;overflow-y:hidden!important;white-space:nowrap!important;padding:0!important;margin:0!important}.sea-tab{flex:0 0 auto!important;white-space:nowrap!important}.dashboard-page main#main-content{padding-top:calc(var(--dashboard-header-height) + var(--dashboard-secondary-height) + 16px)!important}
+@media(max-width:760px){:root{--dashboard-header-height:96px;--dashboard-secondary-height:108px}.site-header{height:var(--dashboard-header-height)!important;min-height:var(--dashboard-header-height)!important;padding:0 10px!important;grid-template-columns:auto minmax(0,1fr)!important;grid-template-rows:48px 48px!important;gap:0 10px!important}.site-header>.on-page-nav{grid-column:1!important;grid-row:1!important}.top-brand{grid-column:2!important;grid-row:1!important;justify-self:start!important;text-align:left!important}.top-brand h1{font-size:14px!important}.top-brand p{display:none!important}.top-nav{grid-column:1/-1!important;grid-row:2!important;justify-self:stretch!important;justify-content:flex-start!important;width:100%!important;max-width:none!important;overflow-x:auto!important;overflow-y:hidden!important;padding:0 0 2px!important}.top-nav a{font-size:12px!important;padding:7px 9px!important}.fixed-secondary-row{height:var(--dashboard-secondary-height)!important;min-height:var(--dashboard-secondary-height)!important;padding:8px 10px!important}.fixed-secondary-inner{display:grid!important;grid-template-columns:1fr!important;grid-template-rows:auto 1fr!important;align-content:center!important;gap:8px!important;overflow:hidden!important}.slim-context-bar,.compact-topbar{width:100%!important;overflow:hidden!important}.inline-context{justify-content:center!important;flex-wrap:wrap!important;white-space:normal!important;line-height:1.2!important;text-align:center!important}.inline-context span{white-space:normal!important}.sea-country-tabs{width:100%!important;justify-content:flex-start!important;overflow-x:auto!important}}
+"""
     write_text(ASSETS / "static-dashboard.css", css)
+    write_text(ASSETS / "static-dashboard.js", (ROOT / "static" / "static-dashboard.js").read_text(encoding="utf-8"))
+    return
     write_text(
         ASSETS / "static-dashboard.js",
         """document.addEventListener('DOMContentLoaded',()=>{const seaTabs=[...document.querySelectorAll('[data-sea-target]')];const seaPanels=[...document.querySelectorAll('.sea-view-panel')];const bookmarkNavs=[...document.querySelectorAll('.on-page-nav')];const topOffset=()=>parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dashboard-header-height'))+parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dashboard-secondary-height'))+16;function selectSea(target,updateHash=true){seaTabs.forEach(tab=>{const active=tab.dataset.seaTarget===target;tab.classList.toggle('active',active);tab.setAttribute('aria-selected',active?'true':'false')});seaPanels.forEach(panel=>{const active=panel.id===target;panel.classList.toggle('active',active);panel.hidden=!active});if(updateHash){history.replaceState(null,'','#'+(target==='sea6-summary-panel'?'sea6-summary':target))}}function scrollToTarget(target){const element=document.getElementById(target);if(!element)return;window.scrollTo({top:element.getBoundingClientRect().top+window.scrollY-topOffset(),behavior:'smooth'})}function panelForHash(hash){const target=document.getElementById(hash);return target?target.closest('.sea-view-panel'):null}if(seaTabs.length){const hash=location.hash.replace('#','');const hashPanel=panelForHash(hash);const initial=hash==='sea6-summary'?'sea6-summary-panel':(hashPanel?hashPanel.id:(seaPanels.some(panel=>panel.id===hash)?hash:'sea6-summary-panel'));selectSea(initial,false);if(hashPanel&&hash!==initial){requestAnimationFrame(()=>scrollToTarget(hash))};seaTabs.forEach(tab=>tab.addEventListener('click',event=>{event.preventDefault();selectSea(tab.dataset.seaTarget,true)}))}bookmarkNavs.forEach(nav=>{const toggle=nav.querySelector('.on-page-toggle');toggle.addEventListener('click',()=>{const open=toggle.getAttribute('aria-expanded')==='true';toggle.setAttribute('aria-expanded',String(!open));nav.setAttribute('aria-expanded',String(!open))});nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();const target=link.getAttribute('href').slice(1);scrollToTarget(target);toggle.setAttribute('aria-expanded','false');nav.setAttribute('aria-expanded','false')}))});function populateYears(select,rows,attribute){if(!select)return;[...new Set(rows.map(row=>row.dataset[attribute]).filter(Boolean))].sort().reverse().forEach(year=>select.insertAdjacentHTML('beforeend',`<option value="${year}">${year}</option>`))}const archiveCards=[...document.querySelectorAll('.archive-card[data-archive-year]')];const archiveYear=document.getElementById('archiveYear');const archiveMonth=document.getElementById('archiveMonth');const archiveSearch=document.getElementById('archiveSearch');function filterArchive(){const year=archiveYear?.value||'all';const month=archiveMonth?.value||'all';const query=(archiveSearch?.value||'').toLowerCase();archiveCards.forEach(card=>{const show=(year==='all'||card.dataset.archiveYear===year)&&(month==='all'||card.dataset.archiveMonth===month)&&(!query||card.textContent.toLowerCase().includes(query));card.hidden=!show})}populateYears(archiveYear,archiveCards,'archiveYear');[archiveYear,archiveMonth,archiveSearch].filter(Boolean).forEach(control=>control.addEventListener('input',filterArchive));const trackerRows=[...document.querySelectorAll('.tracker-row')];const trackerBody=document.querySelector('.data-table tbody');const trackerYear=document.getElementById('trackerYear');const trackerMonth=document.getElementById('trackerMonth');const trackerSearch=document.getElementById('trackerSearch');const trackerSort=document.getElementById('trackerSort');const trackerDirection=document.getElementById('trackerSortDirection');function trackerMatches(row){const year=trackerYear?.value||'all';const month=trackerMonth?.value||'all';const query=(trackerSearch?.value||'').toLowerCase();return(year==='all'||row.dataset.sortYear===year)&&(month==='all'||row.dataset.sortMonth===month)&&(!query||row.textContent.toLowerCase().includes(query))}function sortTracker(){const field=trackerSort?.value||'date';const direction=trackerDirection?.value==='desc'?-1:1;trackerRows.sort((a,b)=>{const av=a.dataset['sort'+field.charAt(0).toUpperCase()+field.slice(1)]||'';const bv=b.dataset['sort'+field.charAt(0).toUpperCase()+field.slice(1)]||'';const an=Number(av),bn=Number(bv);let result=Number.isFinite(an)&&Number.isFinite(bn)?an-bn:av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});if(!av)result=1;if(!bv)result=-1;return result*direction});trackerRows.forEach(row=>trackerBody?.appendChild(row));trackerRows.forEach(row=>{row.hidden=!trackerMatches(row)})}populateYears(trackerYear,trackerRows,'sortYear');sortTracker();[trackerYear,trackerMonth,trackerSearch,trackerSort,trackerDirection].filter(Boolean).forEach(control=>control.addEventListener('input',sortTracker));const clear=document.getElementById('clearTrackerFilters');if(clear)clear.addEventListener('click',()=>{[trackerYear,trackerMonth,trackerSort,trackerDirection].forEach(control=>{if(control)control.value=control.id==='trackerSortDirection'?'asc':control.id==='trackerSort'?'date':'all'});if(trackerSearch)trackerSearch.value='';sortTracker()});const params=new URLSearchParams(location.search);const current=params.get('view')==='table'?'table':'cards';if(current==='table'){document.body.classList.add('table-mode')}document.querySelectorAll('.view-toggle a').forEach(link=>{const url=new URL(link.href,location.href);const mode=url.searchParams.get('view')==='table'?'table':'cards';if(mode===current){link.classList.add('active');link.setAttribute('aria-current','true')}else{link.classList.remove('active');link.setAttribute('aria-current','false')}})});""",
@@ -2114,7 +2345,7 @@ main#main-content{width:100%!important;max-width:1480px!important;margin:0 auto!
     write_text(
         ASSETS / "static-dashboard.js",
         (ASSETS / "static-dashboard.js").read_text(encoding="utf-8")
-        + """document.addEventListener('DOMContentLoaded',()=>{const links=[...document.querySelectorAll('.on-page-links a')];const targets=links.map(link=>document.getElementById(link.getAttribute('href').slice(1))).filter(Boolean);if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){links.forEach(link=>link.classList.toggle('is-current',link.getAttribute('href')==='#'+entry.target.id))}})},{rootMargin:'-25% 0px -65% 0px',threshold:0});targets.forEach(target=>observer.observe(target))}});""",
+        + r"""document.addEventListener('DOMContentLoaded',()=>{const nav=document.getElementById('global-section-nav');const tabs=[...document.querySelectorAll('[data-sea-target]')];let observer=null;const items=[['market-snapshot','Market Snapshot'],['mobile-pc-games','Mobile + PC Games'],['mobile-only-games','Mobile-only Games'],['pc-only-games','PC-only Games'],['industry-trends','Industry Trends'],['game-announcements','Game Announcements']];const refresh=scope=>{if(!nav)return;const panel=scope==='sea6'?'sea6':scope.replace('sea-','');const links=items.map(([suffix,label])=>{const id=`${panel}-${suffix}`;return document.getElementById(id)?`<a href="#${id}">${label}</a>`:''}).join('');const linkBox=nav.querySelector('.on-page-links');if(linkBox)linkBox.innerHTML=links;nav.dataset.bookmarkScope=scope;const toggle=nav.querySelector('.on-page-toggle');if(toggle)toggle.setAttribute('aria-controls',`${scope}-on-page-links`);if(linkBox)linkBox.id=`${scope}-on-page-links`;nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();const el=document.getElementById(link.hash.slice(1));if(el){window.scrollTo({top:el.getBoundingClientRect().top+window.scrollY-(parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dashboard-header-height'))+parseInt(getComputedStyle(document.documentElement).getPropertyValue('--dashboard-secondary-height'))+16),behavior:'smooth'});}nav.setAttribute('aria-expanded','false');if(toggle)toggle.setAttribute('aria-expanded','false');}));if(observer)observer.disconnect();const targets=[...linkBox.querySelectorAll('a')].map(link=>document.getElementById(link.hash.slice(1))).filter(Boolean);if('IntersectionObserver'in window){observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting)nav.querySelectorAll('a').forEach(link=>link.classList.toggle('is-current',link.hash===`#${entry.target.id}`))}),{rootMargin:'-25% 0px -65% 0px',threshold:0});targets.forEach(target=>observer.observe(target));}};if(nav){const toggle=nav.querySelector('.on-page-toggle');toggle.addEventListener('click',()=>{const open=nav.getAttribute('aria-expanded')==='true';nav.setAttribute('aria-expanded',String(!open));toggle.setAttribute('aria-expanded',String(!open));});refresh('sea6');tabs.forEach(tab=>tab.addEventListener('click',()=>refresh(tab.dataset.seaTarget==='sea6-summary-panel'?'sea6':tab.dataset.seaTarget)));}const fields=['Primary','Secondary','Tertiary'];const sortRows=()=>{const rows=[...document.querySelectorAll('.tracker-row')],body=document.querySelector('.data-table tbody');const criteria=fields.map(level=>{const select=document.getElementById(`tracker${level}Sort`),direction=document.getElementById(`tracker${level}Direction`);return select&&select.value?{field:select.value,direction:direction?.value==='desc'?-1:1}:null}).filter(Boolean);const value=(row,field)=>row.dataset[`sort${field.charAt(0).toUpperCase()+field.slice(1)}`]||'';const compare=(a,b)=>{for(const criterion of criteria){const av=value(a,criterion.field),bv=value(b,criterion.field);if(!av&&!bv)continue;if(!av)return 1;if(!bv)return -1;const an=Number(av),bn=Number(bv);const result=Number.isFinite(an)&&Number.isFinite(bn)?an-bn:av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});if(result)return result*criterion.direction;}return 0;};rows.sort(compare).forEach(row=>body?.appendChild(row));const year=document.getElementById('trackerYear')?.value||'all',month=document.getElementById('trackerMonth')?.value||'all',query=(document.getElementById('trackerSearch')?.value||'').toLowerCase();rows.forEach(row=>{row.hidden=!((year==='all'||row.dataset.sortYear===year)&&(month==='all'||row.dataset.sortMonth===month)&&(!query||row.textContent.toLowerCase().includes(query)));});};fields.flatMap(level=>[`tracker${level}Sort`,`tracker${level}Direction`]).concat(['trackerYear','trackerMonth','trackerSearch']).forEach(id=>document.getElementById(id)?.addEventListener('input',sortRows));document.getElementById('clearTrackerFilters')?.addEventListener('click',()=>{['trackerYear','trackerMonth'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='all';});document.getElementById('trackerSearch').value='';document.getElementById('trackerPrimarySort').value='date';['trackerSecondarySort','trackerTertiarySort'].forEach(id=>document.getElementById(id).value='');sortRows();});document.getElementById('downloadTrackerCsv')?.addEventListener('click',()=>{const table=document.querySelector('.data-table table'),rows=[...document.querySelectorAll('.tracker-row:not([hidden])')],escapeCsv=value=>`"${String(value??'').replace(/"/g,'""').replace(/\r?\n/g,' ')}"`,headers=[...table.querySelectorAll('thead th')].map(cell=>escapeCsv(cell.innerText.trim())),lines=[headers.join(',')];rows.forEach(row=>lines.push([...row.querySelectorAll('td')].map(cell=>escapeCsv(cell.innerText.trim())).join(',')));const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`game-tracker-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);});sortRows();});""",
     )
 
 
@@ -2126,10 +2357,8 @@ def main(argv=None):
     weekly_summary = source_weekly_summary()
     metadata = source_metadata()
     schedule = read_json(SCHEDULE, {})
-    if args.meeting_date:
-        schedule = dict(schedule)
-        schedule["upcoming_meeting_date"] = args.meeting_date
-    rows = source_report_rows(metadata, schedule)
+    rows = game_layer_report_rows(args.meeting_date) if args.meeting_date else source_report_rows(metadata, schedule)
+    apply_controlled_genres(rows)
     require_valid_game_genres(rows)
     news_context = source_news_context(rows, schedule)
     sea_games = source_sea_game_layer(rows, schedule)

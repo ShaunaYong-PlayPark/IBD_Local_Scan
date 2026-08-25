@@ -23,9 +23,15 @@ ENRICHMENT_FIELDS = [
     "release_date_source_url",
     "official_site_url",
     "store_url",
+    "mobile_storefront_url",
     "developer",
     "publisher",
+    "publisher_source_url",
     "genre",
+    "genre_source_url",
+    "comparable_game",
+    "comparison_reason",
+    "comparison_source_url",
     "platforms_confirmed",
     "mobile_pc_relationship",
     "registry_game_id",
@@ -46,9 +52,15 @@ RESEARCH_OVERLAY_FIELDS = [
     "release_date_source_url",
     "official_site_url",
     "store_url",
+    "mobile_storefront_url",
     "developer",
     "publisher",
+    "publisher_source_url",
     "genre",
+    "genre_source_url",
+    "comparable_game",
+    "comparison_reason",
+    "comparison_source_url",
     "platforms_confirmed",
     "mobile_pc_relationship",
     "registry_game_id",
@@ -74,7 +86,7 @@ PUBLIC_METADATA_OVERRIDES = {
     "ragnarok the new world": {
         "publisher": "GRAVITY",
         "developer": "Gravity Game Vision",
-        "genre": "Open-world MMORPG / Role-playing",
+        "genre": "Open World; MMORPG; RPG",
     },
 }
 
@@ -193,9 +205,15 @@ def base_enrichment_row(row):
         "release_date_source_url": release_source_url or UNKNOWN,
         "official_site_url": UNKNOWN,
         "store_url": store_url,
+        "mobile_storefront_url": genre_reference.get("mobile_storefront_url") or "",
         "developer": UNKNOWN,
-        "publisher": row.get("unified_publisher_name") or UNKNOWN,
+        "publisher": genre_reference.get("publisher") or row.get("unified_publisher_name") or UNKNOWN,
+        "publisher_source_url": genre_reference.get("publisher_source_url") or "",
         "genre": genre_reference.get("genre") or UNKNOWN,
+        "genre_source_url": genre_reference.get("genre_source_url") or "",
+        "comparable_game": genre_reference.get("comparable_game") or "",
+        "comparison_reason": genre_reference.get("comparison_reason") or "",
+        "comparison_source_url": genre_reference.get("comparison_source_url") or "",
         "platforms_confirmed": platforms(row),
         "mobile_pc_relationship": relationship(classification),
         "registry_game_id": row.get("registry_game_id") or UNKNOWN,
@@ -228,6 +246,19 @@ def read_research_overlay(path):
     return overlay
 
 
+def is_blank_or_unconfirmed(value):
+    return str(value or "").strip().lower() in {"", UNKNOWN}
+
+
+def append_source_urls(existing, *urls):
+    sources = [part.strip() for part in str(existing or "").split("|") if part.strip()]
+    for url in urls:
+        url = str(url or "").strip()
+        if url and url not in sources:
+            sources.append(url)
+    return " | ".join(sources)
+
+
 def apply_overlay(row, overlay):
     values = overlay.get(pc.normalize_title(row.get("report_name")), {})
     if not values:
@@ -240,13 +271,19 @@ def apply_overlay(row, overlay):
     reference = genre_references().get(pc.normalize_title(row.get("report_name")), {})
     if reference.get("genre"):
         updated["genre"] = reference["genre"]
-    if reference.get("genre_source_url"):
-        existing_sources = str(updated.get("source_urls") or "").strip()
-        source_url = reference["genre_source_url"].strip()
-        if not existing_sources:
-            updated["source_urls"] = source_url
-        elif source_url not in existing_sources:
-            updated["source_urls"] = f"{source_url} | {existing_sources}"
+        updated["genre_source_url"] = reference.get("genre_source_url", "")
+    if reference.get("mobile_storefront_url") and is_blank_or_unconfirmed(updated.get("mobile_storefront_url")):
+        updated["mobile_storefront_url"] = reference["mobile_storefront_url"]
+    for field in ("publisher", "publisher_source_url", "comparable_game", "comparison_reason", "comparison_source_url"):
+        if reference.get(field) and is_blank_or_unconfirmed(updated.get(field)):
+            updated[field] = reference[field]
+    updated["source_urls"] = append_source_urls(
+        updated.get("source_urls"),
+        reference.get("genre_source_url"),
+        reference.get("publisher_source_url"),
+        reference.get("comparison_source_url"),
+        reference.get("mobile_storefront_url"),
+    )
     if updated["enrichment_status"] == "needs_research":
         updated["enrichment_status"] = "research_overlay_applied"
     return updated

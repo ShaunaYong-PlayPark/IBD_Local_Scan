@@ -291,10 +291,15 @@ def output_path(meeting_date):
 def mobile_match_keys(row):
     keys = []
     for field in ("english_report_name", "unified_name"):
-        key = pc.normalize_title(row.get(field))
-        if key:
-            keys.append(key)
-    return keys
+        keys.extend(title_alias_keys(row.get(field)))
+    return sorted(set(key for key in keys if key))
+
+
+def pc_match_keys(row):
+    keys = []
+    for field in ("pc_title", "matched_mobile_main_game"):
+        keys.extend(title_alias_keys(row.get(field)))
+    return sorted(set(key for key in keys if key))
 
 
 def date_period(start_date, end_date):
@@ -472,16 +477,17 @@ def index_pc_main_rows(pc_rows, mobile_rows):
     pc_only = []
     matched_pc_ids = set()
     for pc_row in pc_rows:
-        match_key = pc.normalize_title(pc_row.get("matched_mobile_main_game"))
-        if match_key and match_key in mobile_keys and (
+        match_keys = pc_match_keys(pc_row)
+        matched_key = next((key for key in match_keys if key in mobile_keys), "")
+        if matched_key and (
             pc_row.get("pc_main_report_candidate") == "true" or report_period_pc_row(pc_row)
         ):
-            pc_by_mobile_key[match_key] = best_pc(pc_by_mobile_key.get(match_key), pc_row)
+            pc_by_mobile_key[matched_key] = best_pc(pc_by_mobile_key.get(matched_key), pc_row)
             matched_pc_ids.add(pc_row.get("steam_app_id", ""))
             continue
 
-        exact_key = pc.normalize_title(pc_row.get("pc_title"))
-        if exact_key and exact_key in mobile_keys and (
+        exact_key = next((key for key in match_keys if key in mobile_keys), "")
+        if exact_key and (
             pc_row.get("pc_main_report_candidate") == "true" or report_period_pc_row(pc_row)
         ):
             pc_by_mobile_key[exact_key] = best_pc(pc_by_mobile_key.get(exact_key), pc_row)

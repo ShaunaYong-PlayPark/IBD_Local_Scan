@@ -33,6 +33,13 @@ def display_date(value):
         return str(value or "N/A")
 
 
+def parse_date(value):
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
 def latest_meeting_date(current_meeting_date):
     candidates = [current_meeting_date]
     if PROOF_ROOT.exists():
@@ -53,7 +60,14 @@ def rewrite_proof_html(path, meeting_date, latest_date):
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
     rows = payload.get("rows") or []
     first = rows[0] if rows else {}
-    period = f'{display_date(first.get("report_start_date"))} to {display_date(first.get("report_end_date"))}'
+    start_date = first.get("report_start_date")
+    end_date = first.get("report_end_date")
+    start = parse_date(start_date)
+    end = parse_date(end_date)
+    if start and end and start.year == end.year:
+        period = f'{start.strftime("%d %b")} to {end.strftime("%d %b %Y")}'
+    else:
+        period = f'{display_date(start_date)} to {display_date(end_date)}'
     meeting = display_date(first.get("meeting_date") or meeting_date)
     data_as_of = display_date((payload.get("metadata") or {}).get("sensor_tower_data_as_of_date") or first.get("report_end_date"))
     latest = display_date(latest_date)
@@ -71,7 +85,7 @@ def rewrite_proof_html(path, meeting_date, latest_date):
     )
     html = re.sub(
         r'<div class="inline-context">.*?</div>',
-        f'<div class="inline-context">\n          <b title="Historical Brief | Period: {period} | Meeting: {meeting} | Data as of: {data_as_of}">Historical Brief</b>\n          <span>Historical period: {period}</span>\n          <span>Meeting {meeting}</span>\n          <span>Data {data_as_of}</span>\n          <span>Latest {latest}</span>\n        </div>',
+        f'<div class="inline-context">\n          <b title="Historical Brief {period} | Meeting {meeting} | Data as of {data_as_of}">Historical Brief</b>\n          <span>{period}</span>\n          <span>Meeting {meeting}</span>\n          <span>Data as of {data_as_of}</span>\n        </div>',
         html,
         flags=re.S,
     )
@@ -84,7 +98,7 @@ def rewrite_proof_html(path, meeting_date, latest_date):
     html = html.replace('href="../../latest-brief.html" aria-current="true">Card view', 'href="./latest-brief.html" aria-current="true">Card view')
     html = html.replace('href="latest-brief.html?view=table"', 'href="./latest-brief.html?view=table"')
     html = html.replace('href="../../latest-brief.html?view=table"', 'href="./latest-brief.html?view=table"')
-    path.write_text(html, encoding="utf-8")
+    path.write_text("\n".join(line.rstrip() for line in html.splitlines()) + "\n", encoding="utf-8")
 
 
 def copy_outputs(meeting_date):

@@ -138,7 +138,7 @@ def test_build_enriched_layer_from_eight_report_rows():
         assert_equal(by_name["hololive Dreams"]["report_classification"], "mobile_led_cross_platform", "mobile-led kept")
         assert_equal(by_name["Ragnarok: The New World"]["publisher"], "GRAVITY", "Ragnarok publisher override")
         assert_equal(by_name["Ragnarok: The New World"]["developer"], "Gravity Game Vision", "Ragnarok developer override")
-        assert_equal(by_name["Ragnarok: The New World"]["genre"], "Open-world MMORPG / Role-playing", "Ragnarok genre override")
+        assert_equal(by_name["Ragnarok: The New World"]["genre"], "Open World; MMORPG; RPG", "Ragnarok genre override")
         assert_equal(by_name["Pass the Fear"]["report_classification"], "pc_only", "PC-only kept")
         assert_equal(by_name["DIGIMON UP"]["official_site_url"], "unconfirmed", "unknown URL unconfirmed")
         assert_equal(by_name["DIGIMON UP"]["developer"], "unconfirmed", "unknown developer unconfirmed")
@@ -155,25 +155,55 @@ def test_appendix_sources_are_not_inputs():
 def test_research_overlay_can_fill_free_codex_results():
     def run(_tmp):
         write_game_layer_fixture()
+        original_genre_references = enrich.genre_references
+        reference_rows = {
+            "pass the fear": {
+                "genre": "Roguelite; Bullet Hell; Shooter",
+                "genre_source_url": "https://example.com/pass-the-fear-genre",
+                "publisher": "Reference Publisher",
+                "publisher_source_url": "https://example.com/pass-the-fear-reference-publisher",
+            },
+            "dragonsword awakening": {
+                "genre": "Open World; Action RPG; Anime RPG",
+                "genre_source_url": "https://example.com/dragonsword-genre",
+                "publisher": "Reference Publisher",
+                "publisher_source_url": "https://example.com/dragonsword-publisher",
+            },
+        }
+        enrich.genre_references = lambda path=enrich.GENRE_REFERENCE_PATH: reference_rows
         overlay_path = enrich.default_research_overlay_path("2026-07-28")
-        write_csv(
-            overlay_path,
-            [
-                {
-                    "report_name": "Pass the Fear",
-                    "developer": "Overlay Developer",
-                    "publisher": "Overlay Publisher",
-                    "source_urls": "https://example.com/pass-the-fear",
-                    "summary_sentence_1": "Overlay summary.",
-                }
-            ],
-            enrich.RESEARCH_OVERLAY_FIELDS,
-        )
-        _path, rows = enrich.build("2026-07-28")
-        by_name = {row["report_name"]: row for row in rows}
-        assert_equal(by_name["Pass the Fear"]["developer"], "Overlay Developer", "overlay developer applied")
-        assert_equal(by_name["Pass the Fear"]["publisher"], "Overlay Publisher", "overlay publisher applied")
-        assert_equal(by_name["Pass the Fear"]["summary_sentence_1"], "Overlay summary.", "overlay summary applied")
+        try:
+            write_csv(
+                overlay_path,
+                [
+                    {
+                        "report_name": "Pass the Fear",
+                        "developer": "Overlay Developer",
+                        "publisher": "Overlay Publisher",
+                        "publisher_source_url": "https://example.com/pass-the-fear-publisher",
+                        "source_urls": "https://example.com/pass-the-fear",
+                        "summary_sentence_1": "Overlay summary.",
+                    }
+                ],
+                enrich.RESEARCH_OVERLAY_FIELDS,
+            )
+            _path, rows = enrich.build("2026-07-28")
+            by_name = {row["report_name"]: row for row in rows}
+            assert_equal(by_name["Pass the Fear"]["developer"], "Overlay Developer", "overlay developer applied")
+            assert_equal(by_name["Pass the Fear"]["publisher"], "Overlay Publisher", "manual publisher wins over genre reference publisher")
+            assert_equal(by_name["Pass the Fear"]["genre"], "Roguelite; Bullet Hell; Shooter", "controlled genre remains valid")
+            assert_equal(by_name["Pass the Fear"]["publisher_source_url"], "https://example.com/pass-the-fear-publisher", "manual publisher source preserved")
+            assert_true(
+                "https://example.com/pass-the-fear" in by_name["Pass the Fear"]["source_urls"]
+                and "https://example.com/pass-the-fear-genre" in by_name["Pass the Fear"]["source_urls"]
+                and "https://example.com/pass-the-fear-reference-publisher" in by_name["Pass the Fear"]["source_urls"],
+                "overlay and genre reference source URLs are both preserved",
+            )
+            assert_equal(by_name["Pass the Fear"]["summary_sentence_1"], "Overlay summary.", "overlay summary applied")
+            assert_equal(by_name["DragonSword : Awakening"]["publisher"], "Reference Publisher", "reference publisher fills without manual publisher")
+            assert_equal(by_name["DragonSword : Awakening"]["publisher_source_url"], "https://example.com/dragonsword-publisher", "reference publisher source preserved")
+        finally:
+            enrich.genre_references = original_genre_references
     with_temp_roots(run)
 
 
